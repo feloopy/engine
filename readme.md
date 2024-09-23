@@ -29,7 +29,7 @@
 
 <details>
 
-<summary> Why the "Windows Protected Your PC" Warning Appears and a Quick Fix </summary>
+<summary> <b> Why the "Windows Protected Your PC" Warning Appears and a Quick Fix </b> </summary>
 
 <br>
 
