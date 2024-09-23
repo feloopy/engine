@@ -15,6 +15,7 @@
   <strong>Enhanced FelooPy installation and management experience</strong>
 </p>
 
-
-![First Frame](repo\assets\first-frame.png)
+<div style="text-align: center;">
+  <img src="./repo/assets/first-frame.png" alt="First Frame" />
+</div>
 
