@@ -31,7 +31,7 @@ FelooPy Engine is an effective tool crafted to simplify Python development by st
 <br>
 
 
-### FAQ
+### Quick FAQ
 
 <details>
 
