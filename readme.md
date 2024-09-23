@@ -11,9 +11,9 @@
 </div>
 
 
-
-
-
 <p align="center">
-  <strong>Enhanced installation and management of FelooPy</strong>
+  <strong>Enhanced FelooPy installation and management experience</strong>
 </p>
+
+
+![First Frame](./repo/assets/first-frame.png)
