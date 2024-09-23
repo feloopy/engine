@@ -16,10 +16,12 @@
 
 <div align="center" style="margin-bottom: 2px;">
 
-![Version](https://img.shields.io/static/v1?label=Version&message=v0.0.1&color=orange&labelColor=blue)
+![Version](https://img.shields.io/static/v1?label=version&message=v0.0.1&color=orange&labelColor=blue)
 ![Release Date](https://img.shields.io/github/release-date/feloopy/engine?label=release&color=orange&labelColor=blue)
-![Downloads](https://img.shields.io/badge/dynamic/json?color=orange&label=downloads&query=total_downloads&url=https://api.github.com/repos/feloopy/engine/releases/latest&labelColor=blue)
+![Downloads](https://img.shields.io/github/downloads/feloopy/engine/total?label=downloads&color=orange&labelColor=blue)
 ![License](https://img.shields.io/static/v1?label=license&message=MIT&color=orange&labelColor=blue)
+
+</div>
 
 </div>
 
