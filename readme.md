@@ -75,22 +75,23 @@ Next, you will see the installation mode page. If you are installing Python and 
 
 
 <br>
-In the following frame, you will have two options: use an existing python.exe file on your system or download and install a new Python version, which you can select from available versions or enter manually. The default installation directory for Python can be changed if needed.
 
+In the following frame, you will have two options: use an existing python.exe file on your system or download and install a new Python version, which you can select from available versions or enter manually. The default installation directory for Python can be changed if needed.
 
 <br>
 
 <div style="text-align: center;"> <img src="./repo/assets/fourth-frame.png" alt="Fourth Frame" /> </div>
 
 <br>
+
 Next, you will choose between using an existing virtual environment or creating a new one. If you have a virtual environment folder (e.g., `flp-310`), select that directory and enter the folder name. If not, create a new virtual environment in your preferred directory with your chosen name.
 
 <br>
 
 <div style="text-align: center;"> <img src="./repo/assets/fifth-frame.png" alt="Fifth Frame" /> </div>
 
-
 <br>
+
 Then, select the version of the FelooPy package to install, along with its variant. Optional features allow you to install additional packages from PyPI, enabling integration with some commercial or extra packages.
 
 <br>
@@ -98,18 +99,23 @@ Then, select the version of the FelooPy package to install, along with its varia
 <div style="text-align: center;"> <img src="./repo/assets/sixth-frame.png" alt="Sixth Frame" /> </div>
 
 <br>
+
 On the following page, you will get an overview of the actions that will be taken, along with notes and information on commands and directories.
 
 <br>
+
 <div style="text-align: center;"> <img src="./repo/assets/seventh-frame.png" alt="Seventh Frame" /> </div>
 
 <br>
+
 The installation progress will then begin. This process may take some time, depending on your internet speed and system specifications.
 
 <br>
+
 <div style="text-align: center;"> <img src="./repo/assets/eighth-frame.png" alt="Eighth Frame" /> </div>
 
 <br>
+
 Once the process is complete, you will receive additional information and the path to the virtual environment where FelooPy is installed. Ensure that this path is included in your PATH environment variable. If not, you may need to rerun the process with administrator rights or do it manually.
 
 <br>
