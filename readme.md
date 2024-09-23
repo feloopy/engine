@@ -29,7 +29,11 @@
 
 <details>
 
-<summary> Note: Why the "Windows Protected Your PC" Warning Appears and a Quick Fix </summary>
+<summary> Why the "Windows Protected Your PC" Warning Appears and a Quick Fix </summary>
+
+<br>
+
+
 
 Since FelooPy Engine is currently built using PyInstaller, which packages Python files into an executable, Windows Defender or SmartScreen may show a "Windows Protected Your PC" warning. This occurs because the executable is currently digitally unsigned, and Windows treats unsigned or unfamiliar applications—especially new ones—as potential risks, even if the app is safe to run. You might refer to [Pyinstaller's official repository](https://github.com/pyinstaller/pyinstaller/issues) for more information.
 
