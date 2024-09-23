@@ -17,6 +17,8 @@
 <br>
 <br>
 
+### Quick Intro
+
 FelooPy Engine is an effective tool crafted to simplify Python development by streamlining the installation of the CPython interpreter, creating virtual environments, and managing the FelooPy package. Its portable, user-friendly design requires no installation, making it an invaluable toolkit for effortlessly setting up the integrated development environment of FelooPy on Windows.
 
 <div style="text-align: center;">
@@ -54,7 +56,8 @@ To bypass the "false-positive" warning, click "More info" and then select "Run a
 <br>
 <br>
 
-#### Usage
+### Quick Use
+
 The next frame will display the user agreement page:
 
 <div style="text-align: center;"> <img src="./repo/assets/second-frame.png" alt="Second Frame" /> </div>
