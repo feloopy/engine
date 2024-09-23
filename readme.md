@@ -83,3 +83,6 @@ Once the process is complete, you'll receive additional information and the path
 
 <div style="text-align: center;"> <img src="./repo/assets/final-frame.png" alt="Final Frame" /> </div>
 Thank you for using and supporting FelooPy!
+
+
+_Note_: If you are unsure how to check, set, or modify environment variables on Windows, it is recommended searching for guidance on editing them to ensure proper configuration.
