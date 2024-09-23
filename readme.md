@@ -17,6 +17,8 @@
 <br>
 <br>
 
+FelooPy Engine is an effective tool crafted to simplify Python development by streamlining the installation of the CPython interpreter, creating virtual environments, and managing the FelooPy package. Its portable, user-friendly design requires no installation, making it an invaluable toolkit for effortlessly setting up the integrated development environment of FelooPy on Windows.
+
 <div style="text-align: center;">
   <img src="./repo/assets/first-frame.png" alt="First Frame" />
 </div>
