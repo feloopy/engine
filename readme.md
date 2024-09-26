@@ -16,7 +16,7 @@
 
 <div align="center" style="margin-bottom: 2px;">
 
-![Version](https://img.shields.io/static/v1?label=version&message=v0.0.2&color=orange&labelColor=blue)
+![Version](https://img.shields.io/static/v1?label=version&message=v0.0.3&color=orange&labelColor=blue)
 ![Release Date](https://img.shields.io/github/release-date/feloopy/engine?label=release&color=orange&labelColor=blue)
 ![Downloads](https://img.shields.io/github/downloads/feloopy/engine/total?label=downloads&color=orange&labelColor=blue)
 ![License](https://img.shields.io/static/v1?label=license&message=MIT&color=orange&labelColor=blue)
@@ -28,7 +28,7 @@
 <br>
 
 <p align="center">
-  <a href="https://github.com/feloopy/engine/releases/download/v0.0.2/feloopy-engine.zip">
+  <a href="https://github.com/feloopy/engine/releases/download/v0.0.3/feloopy-engine.zip">
     <img src="https://img.shields.io/badge/Download-orange?style=flat-square&logo=download&logoColor=white" alt="Download" width="90"/>
   </a>
 </p>
