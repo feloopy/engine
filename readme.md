@@ -23,10 +23,10 @@ curl -fsSL https://raw.githubusercontent.com/feloopy/engine/main/scripts/install
 (Powershell)
 
 ```ps
-$t=[int](Get-Date -UFormat %s); Invoke-RestMethod "https://raw.githubusercontent.com/feloopy/engine/main/scripts/install-windows.ps1?t=$t" | Invoke-Expression
+$t=[int](Get-Date -UFormat %s); iex (Invoke-WebRequest "https://raw.githubusercontent.com/feloopy/engine/main/scripts/install-windows.ps1?t=$t" -UseBasicParsing).Content
 ```
 (Command Prompt)
 
 ```cmd
-powershell -NoProfile -Command "$t=[int](Get-Date -UFormat %s); Invoke-RestMethod \"https://raw.githubusercontent.com/feloopy/engine/main/scripts/install-windows.ps1?t=$t\" | Invoke-Expression"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[int](Get-Date -UFormat %s); iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/feloopy/engine/main/scripts/install-windows.ps1?t=' + $t)"
 ```
