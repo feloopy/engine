@@ -1,32 +1,39 @@
-name: Test CPython Interpreters Installers
+name: Test Universal Installer
 on:
   workflow_dispatch:
 
 jobs:
-  test-all:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+  test-linux:
+    runs-on: ubuntu-latest
+    env:
+      TERM: xterm-256color
     steps:
-      - name: show-runner
-        run: uname -a || ver
-
-      - name: test-linux-installer
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          set -e
-          bash -c 'curl -fsSL "https://raw.githubusercontent.com/feloopy/engine/$(curl -fsSL -H '\''Accept: application/vnd.github.v3+json'\'' -H '\''User-Agent: curl'\'' https://api.github.com/repos/feloopy/engine 2>/dev/null | sed -nE '\''s/.*\"default_branch\": *\"([^\"]+)\".*/\1/p'\'' || echo main)/interpreters/cpython/install-linux.sh" | bash'
-
-      - name: test-macos-installer
-        if: matrix.os == 'macos-latest'
+      - uses: actions/checkout@v4
+      - name: Run linux installer
         shell: bash
         run: |
-          set -e
+          export TERM=${TERM:-xterm-256color}
+          set -euo pipefail
+          bash -c 'curl -fsSL "https://raw.githubusercontent.com/feloopy/engine/$(curl -fsSL -H '\''Accept: application/vnd.github.v3+json'\'' -H '\''User-Agent: curl'\'' https://api.github.com/repos/feloopy/engine 2>/dev/null | sed -nE '\''s/.*\"default_branch\": *\"([^\"]+)\".*/\1/p'\'' || echo main)/interpreters/cpython/install-linux.sh" | bash'
+
+  test-macos:
+    runs-on: macos-latest
+    env:
+      TERM: xterm-256color
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run macos installer
+        shell: bash
+        run: |
+          export TERM=${TERM:-xterm-256color}
+          set -euo pipefail
           bash -c 'curl -fsSL "https://raw.githubusercontent.com/feloopy/engine/$(curl -fsSL -H '\''Accept: application/vnd.github.v3+json'\'' -H '\''User-Agent: curl'\'' https://api.github.com/repos/feloopy/engine 2>/dev/null | sed -nE '\''s/.*\"default_branch\": *\"([^\"]+)\".*/\1/p'\'' || echo main)/interpreters/cpython/install-macos.sh" | bash'
 
-      - name: test-windows-powershell-installer
-        if: matrix.os == 'windows-latest'
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run windows installer with pwsh
         shell: pwsh
         run: |
           $t=[int]((Get-Date).ToUniversalTime() - (Get-Date '1970-01-01')).TotalSeconds
@@ -34,7 +41,6 @@ jobs:
           $u='https://raw.githubusercontent.com/feloopy/engine/main/interpreters/cpython/install-windows.ps1?t='+$t
           iex (Invoke-WebRequest -Uri $u).Content
 
-      - name: test-windows-cmd-style
-        if: matrix.os == 'windows-latest'
+      - name: Run windows installer cmd-style
         shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[int]((Get-Date).ToUniversalTime()-(Get-Date '1970-01-01')).TotalSeconds; $u='https://raw.githubusercontent.com/feloopy/engine/main/interpreters/cpython/install-windows.ps1?t='+$t; iex (Invoke-WebRequest -Uri $u).Content"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[int]((Get-Date).ToUniversalTime()-(Get-Date '1970-01-01')).TotalSeconds; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $u='https://raw.githubusercontent.com/feloopy/engine/main/interpreters/cpython/install-windows.ps1?t='+$t; iex (Invoke-WebRequest -Uri $u).Content"
