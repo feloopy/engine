@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-trap_exit(){ code="$1"; if [ "${code:-0}" -ne 0 ]; then printf 'Script exited with error code %d\n' "$code" >&2; else printf 'Script finished successfully\n'; fi; if IsInteractive; then printf '\nPress Enter to close...'; read -r _dummy; fi; exit "$code"; }
+trap_exit(){ code="$1"; if [ "${code:-0}" -ne 0 ]; then printf 'Script exited with error code %d\n' "$code" >&2; else printf 'Script finished successfully\n' >&2; fi; if IsInteractive; then printf '\nPress Enter to close...'; read -r _dummy; fi; exit "$code"; }
 trap 'rc=$?; trap_exit "$rc"' EXIT
 set -euo pipefail
 
 IsInteractive(){ if [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${CI:-}" ]; then return 1; fi; if [ ! -t 1 ]; then return 1; fi; case "$TERM" in dumb|unknown|'') return 1;; esac; return 0; }
 
-: 
 printf '=== pyenv Installation ===\n\n'
 
 USER_HOME="${HOME:-/Users/$(whoami)}"
@@ -139,8 +138,14 @@ else
   printf 'Warning: pyenv binary not found at %s. The clone may have failed or permissions prevent execution.\n' "$PYENV_ROOT/bin/pyenv" >&2
 fi
 
-:
-printf '\n🎉 pyenv and pyenv-virtualenv setup complete!\n'
+wait 2>/dev/null || true
+sync || true
+sleep 0.1
+
+printf '\n############################################\n' >&2
+printf '🎉 pyenv and pyenv-virtualenv setup complete!\n' >&2
+printf '############################################\n\n' >&2
+
 if [ -x "$PYENV_ROOT/bin/pyenv" ]; then
   "$PYENV_ROOT/bin/pyenv" --version || true
   "$PYENV_ROOT/bin/pyenv" root || true
