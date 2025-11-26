@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+printf '=== pyenv Installation Script for Linux ===\n\n'
 trap_exit(){ code=$1
 if [ "$code" -ne 0 ]; then printf 'Script exited with error code %d\n' "$code" >&2; else printf 'Script finished successfully\n'; fi
 if [ -t 1 ]; then printf '\nPress Enter to close...'; read -r _dummy; fi
@@ -6,7 +7,6 @@ exit "$code"
 }
 trap 'trap_exit $?' EXIT
 clear
-printf '=== Engine Installation Script for Linux ===\n\n'
 if [ -z "${HOME:-}" ]; then
   if [ "$(id -u)" -eq 0 ]; then USER_HOME=/root; else USER_HOME="/home/$(whoami)"; fi
 else USER_HOME="$HOME"
@@ -95,4 +95,4 @@ if command -v pyenv >/dev/null 2>&1; then
   if [[ $- == *i* ]]; then pyenv init - | source >/dev/null 2>&1; pyenv init --path | source >/dev/null 2>&1; { command -v pyenv-virtualenv >/dev/null 2>&1 && pyenv virtualenv-init - | source >/dev/null 2>&1; } || true; fi
 fi
 clear
-printf '\n🎉 pyenv installed successfully!\n   ! 🐍\n'
+printf '\n🎉 pyenv installed successfully!'
