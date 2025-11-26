@@ -29,5 +29,5 @@ $t=[int](Get-Date -UFormat %s); iex (Invoke-WebRequest "https://raw.githubuserco
 (Command Prompt)
 
 ```cmd
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[int](Get-Date -UFormat %s); iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/feloopy/engine/main/interpreters/cpython/install-windows.ps1?t=' + $t)"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[int](Get-Date -UFormat %s); iex (Invoke-WebRequest 'https://raw.githubusercontent.com/feloopy/engine/main/interpreters/cpython/install-windows.ps1?t=' + $t -UseBasicParsing).Content"
 ```
