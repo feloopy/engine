@@ -10,42 +10,61 @@ PYENV_ROOT="${PYENV_ROOT:-$USER_HOME/.pyenv}"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$USER_HOME/.config}"
 FISH_CFG="$XDG_CONFIG_HOME/fish/config.fish"; BASH_RC="$USER_HOME/.bashrc"; BASH_PROFILE="$USER_HOME/.bash_profile"; ZSH_RC="${ZDOTDIR:-$USER_HOME}/.zshrc"; ZSH_PROFILE="${ZDOTDIR:-$USER_HOME}/.zprofile"
 
-DETECTED_SHELL=""
-if [ -n "${SHELL:-}" ]; then DETECTED_SHELL="$(basename "$SHELL")"; fi
+DETECTED_SHELL=""; if [ -n "${SHELL:-}" ]; then DETECTED_SHELL="$(basename "$SHELL")"; fi
 if [ -z "$DETECTED_SHELL" ] && [ -r "/proc/$$/cmdline" ]; then DETECTED_SHELL="$(tr '\0' ' ' < /proc/$$/cmdline | awk '{print $1}' | awk -F/ '{print $NF}')"; fi
 if [ -z "$DETECTED_SHELL" ]; then DETECTED_SHELL="$(ps -p $$ -o comm= 2>/dev/null | awk -F/ '{print $NF}' || true)"; fi
 DETECTED_SHELL="$(echo "${DETECTED_SHELL:-}" | tr '[:upper:]' '[:lower:]')"
 
-ARCH="$(uname -m)"
-MACOS_VERSION="$(sw_vers -productVersion 2>/dev/null || echo 'unknown')"
+ARCH="$(uname -m)"; MACOS_VERSION="$(sw_vers -productVersion 2>/dev/null || echo 'unknown')"
 printf 'OS version: %s\narch: %s\nshell: %s\nhome: %s\nPYENV_ROOT: %s\n\n' "$MACOS_VERSION" "$ARCH" "$DETECTED_SHELL" "$USER_HOME" "$PYENV_ROOT"
 
 printf 'Checking for build tools\n'
 if ! xcode-select -p >/dev/null 2>&1; then
-  printf 'Installing Command Line Tools\n'
-  xcode-select --install 2>/dev/null || true
-  while ! xcode-select -p >/dev/null 2>&1; do printf '.'; sleep 2; done
-  printf '\nCommand Line Tools installed\n\n'
+  if [ -n "${CI:-}" ] || [ ! -t 1 ]; then
+    printf 'Command Line Tools not present but running non-interactive (CI/ttyless). Skipping auto-install. Please install Xcode Command Line Tools manually or run interactively.\n\n'
+  else
+    printf 'Installing Command Line Tools (interactive)\n'
+    xcode-select --install 2>/dev/null || true
+    while ! xcode-select -p >/dev/null 2>&1; do printf '.'; sleep 2; done
+    printf '\nCommand Line Tools installed\n\n'
+  fi
 else printf 'Build tools present\n\n'; fi
 
 printf 'Checking for Homebrew\n'
-if ! command -v brew >/dev/null 2>&1; then
-  printf 'Installing Homebrew\n'
-  NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+BREW_BIN="$(command -v brew 2>/dev/null || true)"
+if [ -z "$BREW_BIN" ]; then
+  if [ -x /opt/homebrew/bin/brew ]; then BREW_BIN=/opt/homebrew/bin/brew; fi
+  if [ -z "$BREW_BIN" ] && [ -x /usr/local/bin/brew ]; then BREW_BIN=/usr/local/bin/brew; fi
+  if [ -z "$BREW_BIN" ] && [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then BREW_BIN=/home/linuxbrew/.linuxbrew/bin/brew; fi
+fi
+
+if [ -z "$BREW_BIN" ]; then
+  printf 'Installing Homebrew (noninteractive)\n'
+  export NONINTERACTIVE=1 HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_EMOJI=1
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  if [ -x /opt/homebrew/bin/brew ]; then BREW_BIN=/opt/homebrew/bin/brew; eval "$(/opt/homebrew/bin/brew shellenv)"; fi
+  if [ -z "$BREW_BIN" ] && [ -x /usr/local/bin/brew ]; then BREW_BIN=/usr/local/bin/brew; eval "$(/usr/local/bin/brew shellenv)"; fi
+  if [ -z "$BREW_BIN" ] && [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then BREW_BIN=/home/linuxbrew/.linuxbrew/bin/brew; eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"; fi
   BREW_BIN="$(command -v brew 2>/dev/null || true)"
-  [ -n "$BREW_BIN" ] && { printf 'eval "$(%s shellenv)"\n' "$BREW_BIN" >> "$USER_HOME/.zprofile"; eval "$("$BREW_BIN" shellenv)"; }
-else printf 'Homebrew present\n'; BREW_BIN="$(command -v brew)"; fi
+  [ -n "$BREW_BIN" ] && { printf 'eval "$(%s shellenv)"\n' "$BREW_BIN" >> "$USER_HOME/.zprofile"; }
+else
+  printf 'Homebrew present\n'
+  printf 'brew: %s\n' "$BREW_BIN"
+fi
 
 printf '\nUpdating Homebrew and packages\n'
 if command -v brew >/dev/null 2>&1; then
-  brew update >/dev/null 2>&1 || true
-  brew upgrade >/dev/null 2>&1 || true
+  export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_EMOJI=1 CI="${CI:-1}"
+  brew update || printf 'brew update failed, continuing\n' >&2
+  brew upgrade || printf 'brew upgrade failed, continuing\n' >&2
 fi
 
 BREW_PACKAGES=(openssl readline sqlite3 xz zlib tcl-tk libffi curl git)
 printf 'Installing Homebrew packages: %s\n' "${BREW_PACKAGES[*]}"
 for pkg in "${BREW_PACKAGES[@]}"; do
-  brew list "$pkg" >/dev/null 2>&1 || brew install "$pkg" >/dev/null 2>&1 || printf 'Package %s failed, continuing\n' "$pkg" >&2
+  if brew list "$pkg" >/dev/null 2>&1; then printf 'Already installed: %s\n' "$pkg"; else
+    brew install "$pkg" || printf 'Package %s failed, continuing\n' "$pkg" >&2
+  fi
 done
 
 LDFLAGS=""; CPPFLAGS=""; PKG_CONFIG_PATH=""
