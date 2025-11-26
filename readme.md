@@ -1,7 +1,3 @@
-# Universal Installer
-
-One command to setup the FelooPy engine.
-
 ## Install
 
 Run this single command in your terminal:
