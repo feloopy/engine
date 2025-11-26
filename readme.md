@@ -25,6 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/feloopy/engine/main/scripts/install
 ```ps
 $t=[int](Get-Date -UFormat %s); iex (Invoke-WebRequest "https://raw.githubusercontent.com/feloopy/engine/main/scripts/install-windows.ps1?t=$t" -UseBasicParsing).Content
 ```
+
 (Command Prompt)
 
 ```cmd
