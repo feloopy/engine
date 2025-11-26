@@ -9,13 +9,13 @@ Run this single command in your terminal:
 ### Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/feloopy/engine/main/scripts/install-linux.sh | bash
+bash -c 'curl -fsSL "https://raw.githubusercontent.com/feloopy/engine/$(curl -fsSL -H '\''Accept: application/vnd.github.v3+json'\'' -H '\''User-Agent: curl'\'' https://api.github.com/repos/feloopy/engine 2>/dev/null | sed -nE '\''s/.*\"default_branch\": *\"([^\"]+)\".*/\1/p'\'' || echo main)/scripts/install-linux.sh" | bash'
 ```
 
 ### macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/feloopy/engine/main/scripts/install-macos.sh | bash
+bash -c 'curl -fsSL "https://raw.githubusercontent.com/feloopy/engine/$(curl -fsSL -H '\''Accept: application/vnd.github.v3+json'\'' -H '\''User-Agent: curl'\'' https://api.github.com/repos/feloopy/engine 2>/dev/null | sed -nE '\''s/.*\"default_branch\": *\"([^\"]+)\".*/\1/p'\'' || echo main)/scripts/install-macos.sh" | bash'
 ```
 
 ### Windows
