@@ -13,6 +13,31 @@ function Run-Exec($exe,$args){
   }catch{ return @{Ok=$false;Out=$_.Exception.Message;Exit=$null} }
 }
 
+function Read-Host-Timeout($prompt,$timeoutSec=30,$default=''){
+  try{
+    if(-not [Console]::KeyAvailable -and -not $Host.UI.RawUI){ return $default }
+  }catch{}
+  try{
+    Write-Host -NoNewline "$prompt"
+    $sb = New-Object System.Text.StringBuilder
+    $start = [datetime]::UtcNow
+    while((( [datetime]::UtcNow) - $start ).TotalSeconds -lt [double]$timeoutSec){
+      if([Console]::KeyAvailable){
+        $key = [Console]::ReadKey($true)
+        if($key.Key -eq 'Enter'){ break }
+        if($key.Key -eq 'Backspace'){ if($sb.Length -gt 0){ $sb.Remove($sb.Length-1,1) | Out-Null; [Console]::Write("`b `b") } ; continue }
+        $sb.Append($key.KeyChar) | Out-Null
+        [Console]::Write($key.KeyChar)
+      } else { Start-Sleep -Milliseconds 75 }
+    }
+    [Console]::WriteLine()
+    $res = $sb.ToString()
+    if([string]::IsNullOrWhiteSpace($res)){ return $default } else { return $res.Trim() }
+  }catch{
+    try{ return Read-Host -Prompt $prompt }catch{ return $default }
+  }
+}
+
 if(-not (Get-Command winget -ErrorAction SilentlyContinue)){ Write-Error "winget not found. Install App Installer or enable winget and re-run script."; Exit 1 }
 
 $g=Get-Command pymanager -ErrorAction SilentlyContinue
@@ -42,8 +67,8 @@ if(-not $onlineJson -and $pymgrCmd){
   if($r.Ok -and $r.Out){ $onlineJson = ($r.Out -join "`n") }
 }
 if(-not $onlineJson){
-  try{ $resp=Invoke-WebRequest -UseBasicParsing -Uri 'https://www.python.org/ftp/python/' -ErrorAction Stop; $text=$resp.Content } catch { $text = $null }
-  if($text){ $matches=[System.Text.RegularExpressions.Regex]::Matches($text,'3\.\d+\.\d+') | ForEach-Object{$_.Value} | Sort-Object -Unique -Descending; $online = $matches } else { Write-Error "Could not retrieve Python version list"; Exit 1 }
+  try{ $resp=Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/' -ErrorAction Stop; $text=$resp.Content } catch { $text = $null }
+  if($text){ $matches=[System.Text.RegularExpressions.Regex]::Matches($text,'3\.\d+\.\d+') | ForEach-Object{$_.Value} | Sort-Object -Unique -Descending; $online = $matches } else { Write-Warning "Could not retrieve Python version list from py/pymanager or python.org; proceeding with minimal defaults"; $online = @() }
 } else {
   try{ $json = $onlineJson | ConvertFrom-Json -ErrorAction Stop } catch { $json = $null }
   if($json -ne $null){
@@ -55,15 +80,18 @@ if(-not $onlineJson){
       }
     }
     $online = $online | Where-Object { $_ -match '^3\.\d+\.\d+$' } | Sort-Object -Unique -Descending
-  } else { Write-Warning "Failed to parse JSON from py/pymanager; falling back to python.org listing"; $resp=Invoke-WebRequest -UseBasicParsing -Uri 'https://www.python.org/ftp/python/' -ErrorAction Stop; $matches=[System.Text.RegularExpressions.Regex]::Matches($resp.Content,'3\.\d+\.\d+') | ForEach-Object{$_.Value} | Sort-Object -Unique -Descending; $online = $matches }
+  } else {
+    try{ $resp=Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/' -ErrorAction Stop; $matches=[System.Text.RegularExpressions.Regex]::Matches($resp.Content,'3\.\d+\.\d+') | ForEach-Object{$_.Value} | Sort-Object -Unique -Descending; $online = $matches } catch { Write-Warning "Failed to parse JSON and to fetch python.org listing; continuing with empty list"; $online = @() }
+  }
 }
 
 $verObjs = $online | ForEach-Object { try{ [version]$_ } catch { $null } } | Where-Object { $_ -ne $null } | Sort-Object -Descending
 $map=@{}
 foreach($v in $verObjs){ if($v.Major -eq 3 -and $v.Minor -ge 10){ $k=('{0}.{1}' -f $v.Major,$v.Minor); if(-not $map.ContainsKey($k)){ $map[$k]=$v.ToString() } } }
-if($map.Count -eq 0){ Write-Error "No Python 3.10+ versions found"; Exit 1 }
-$latestPerMajor = $map.Values | Sort-Object {[version]$_} -Descending
-$LATEST = $latestPerMajor[0]
+if($map.Count -eq 0){ Write-Warning "No Python 3.10+ versions discovered online; script will still attempt to work with installed versions" }
+$latestPerMajor = @()
+if($map.Count -gt 0){ $latestPerMajor = $map.Values | Sort-Object {[version]$_} -Descending }
+$LATEST = if($latestPerMajor.Count -gt 0){ $latestPerMajor[0] } else { '' }
 
 Write-Host "Latest versions of each Python major release (3.10+):"
 "{0,-14} {1,-12}" -f "Version","Status" | Write-Host
@@ -90,28 +118,33 @@ $installed = $installed | Sort-Object -Unique -Descending
 foreach($v in $latestPerMajor){ $isInstalled = $installed -contains $v; "{0,-14} {1,-12}" -f $v,(if($isInstalled){"INSTALLED"}else{"Available"}) | Write-Host }
 
 Write-Host "`nCurrently installed versions:"
-if($installed){ $installed | ForEach-Object{ Write-Host "  $_" } } else { Write-Host "  No versions detected via 'py','python' or 'pymanager' in PATH" }
+if($installed -and $installed.Count -gt 0){ $installed | ForEach-Object{ Write-Host "  $_" } } else { Write-Host "  No versions detected via 'py','python' or 'pymanager' in PATH" }
 
-Write-Host "`nLatest version: $LATEST`n"
-$input=Read-Host "Enter the Python version to install or press Enter to use latest ($LATEST)"
-if([string]::IsNullOrWhiteSpace($input)){ $SELECTED=$LATEST } else { $SELECTED=$input }
-if(-not ($SELECTED -match '^\s*3\.\d+\.\d+\s*$')){ Write-Warning "Invalid version format. Using latest $LATEST"; $SELECTED=$LATEST }
+if($LATEST){ Write-Host "`nLatest version: $LATEST`n" } else { Write-Host "`nNo online latest version discovered; defaulting to installed versions where possible.`n" }
 
-$installedNow = $installed -contains $SELECTED
-if($installedNow){ Write-Host "Python $SELECTED already installed, skipping installation" } else {
-  if($pymgrCmd){
-    Write-Host "Installing Python $SELECTED via PyManager..."
-    $r=Run-Exec $pymgrCmd @('install',$SELECTED)
-    if($r.Ok){ Write-Host "Install output:`n$($r.Out -join "`n")" } else { Write-Warning "Install failed or produced no output: $($r.Out)" }
-  } elseif($pyCmd){
-    Write-Host "Installing Python $SELECTED via py..."
-    $r=Run-Exec $pyCmd @('install',$SELECTED)
-    if($r.Ok){ Write-Host "Install output:`n$($r.Out -join "`n")" } else { Write-Warning "Install failed: $($r.Out)" }
-  } else { Write-Warning "No install manager available to install $SELECTED" }
+$userSelection = Read-Host-Timeout "Enter the Python version to install or press Enter to use latest ($LATEST) [timeout 30s]: " 30 $LATEST
+if([string]::IsNullOrWhiteSpace($userSelection)){ $SELECTED=$LATEST } else { $SELECTED=$userSelection }
+if(-not [string]::IsNullOrWhiteSpace($SELECTED) -and -not ($SELECTED -match '^\s*3\.\d+\.\d+\s*$')){ Write-Warning "Invalid version format. Using latest $LATEST"; $SELECTED=$LATEST }
+
+if(-not $SELECTED){ Write-Warning "No version selected and no latest known; aborting installation step." } else {
+  $installedNow = $installed -contains $SELECTED
+  if($installedNow){ Write-Host "Python $SELECTED already installed, skipping installation" } else {
+    if($pymgrCmd){
+      Write-Host "Installing Python $SELECTED via PyManager..."
+      $r=Run-Exec $pymgrCmd @('install',$SELECTED)
+      if($r.Ok){ Write-Host "Install output:`n$($r.Out -join "`n")" } else { Write-Warning "Install failed or produced no output: $($r.Out)" }
+    } elseif($pyCmd){
+      Write-Host "Installing Python $SELECTED via py..."
+      $r=Run-Exec $pyCmd @('install',$SELECTED)
+      if($r.Ok){ Write-Host "Install output:`n$($r.Out -join "`n")" } else { Write-Warning "Install failed: $($r.Out)" }
+    } else { Write-Warning "No install manager available to install $SELECTED" }
+  }
 }
 
-Write-Host "`nSetting Python $SELECTED as user default (best-effort)..."
-try{ [Environment]::SetEnvironmentVariable('PYTHON_MANAGER_DEFAULT',$SELECTED,'User'); Write-Host "Set PYTHON_MANAGER_DEFAULT=$SELECTED (User)" } catch { Write-Warning "Failed to set user env var: $($_.Exception.Message)" }
+if($SELECTED){
+  Write-Host "`nSetting Python $SELECTED as user default (best-effort)..."
+  try{ [Environment]::SetEnvironmentVariable('PYTHON_MANAGER_DEFAULT',$SELECTED,'User'); Write-Host "Set PYTHON_MANAGER_DEFAULT=$SELECTED (User)" } catch { Write-Warning "Failed to set user env var: $($_.Exception.Message)" }
+} else { Write-Warning "Skipping setting default because no selection was determined." }
 
 Write-Host "`n=== Installation Complete ===`n"
 $rA=Run-Exec 'python' @('--version')
@@ -123,7 +156,7 @@ $cmdpip=Get-Command pip -ErrorAction SilentlyContinue
 if($cmdpip){ Write-Host "pip location: $($cmdpip.Path)" } else { Write-Host "pip location: Not found" }
 
 Write-Host "`nInstalled Python versions detected:"
-if($installed){ $installed | ForEach-Object{ Write-Host "  $_" } } else { Write-Host "  None detected" }
+if($installed -and $installed.Count -gt 0){ $installed | ForEach-Object{ Write-Host "  $_" } } else { Write-Host "  None detected" }
 
 Write-Host "`n=== Usage Examples for Python $SELECTED ==="
 Write-Host "  List available versions (online): py list --online -f json"
