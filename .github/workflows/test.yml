@@ -1,4 +1,4 @@
-name: Test Universal Installer
+name: Test CPython Installers
 on:
   workflow_dispatch:
 

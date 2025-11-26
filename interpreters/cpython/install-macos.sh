@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-trap_exit(){ code="$1"; if [ "${code:-0}" -ne 0 ]; then printf 'Script exited with error code %d\n' "$code" >&2; else printf 'Script finished successfully\n' >&2; fi; if IsInteractive; then printf '\nPress Enter to close...'; read -r _dummy; fi; exit "$code"; }
+trap_exit(){ code="$1"; if [ "${code:-0}" -ne 0 ]; then printf 'Script exited with error code %d\n' "$code" >&2; else printf 'Script finished successfully\n' >&2; fi; if IsInteractive; then printf '\nPress Enter to close...'; read -r _dummy; fi; cleanup; exit "$code"; }
 trap 'rc=$?; trap_exit "$rc"' EXIT
 set -euo pipefail
 
-IsInteractive(){ if [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${CI:-}" ]; then return 1; fi; if [ ! -t 1 ]; then return 1; fi; case "$TERM" in dumb|unknown|'') return 1;; esac; return 0; }
+cleanup(){ if [ -n "${TMPDIR:-}" ] && [ -d "${TMPDIR:-}" ]; then rm -rf "$TMPDIR" || true; fi; }
 
-printf '=== pyenv Installation ===\n\n'
+IsInteractive(){ if [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${CI:-}" ]; then return 1; fi; if [ ! -t 1 ]; then return 1; fi; case "${TERM:-}" in dumb|unknown|'') return 1;; esac; return 0; }
 
 USER_HOME="${HOME:-/Users/$(whoami)}"
 PYENV_ROOT="${PYENV_ROOT:-$USER_HOME/.pyenv}"
@@ -60,11 +60,58 @@ if command -v brew >/dev/null 2>&1; then
   brew upgrade || printf 'brew upgrade failed, continuing\n' >&2
 fi
 
+TMPDIR="$(mktemp -d)"
+CAVEAT_FILE="$TMPDIR/brew_caveats.txt"
 BREW_PACKAGES=(openssl readline sqlite3 xz zlib tcl-tk libffi curl git)
 printf 'Installing Homebrew packages: %s\n' "${BREW_PACKAGES[*]}"
+
+run_with_spinner(){
+  label="$1"; shift
+  logfile="$TMPDIR/${label//[^a-zA-Z0-9]/_}.log"
+  if IsInteractive; then
+    printf '%s: starting\n' "$label"
+    ( "$@" >"$logfile" 2>&1 ) &
+    pid=$!
+    spinner='|/-\'
+    i=0; start_ts=$(date +%s)
+    while kill -0 "$pid" 2>/dev/null; do
+      i=$(( (i+1) % 4 ))
+      printf '\r[%s] %s ... %s' "${spinner:i:1}" "$label" "$(date -u -r $(( $(date +%s) - start_ts )) -u +%T 2>/dev/null || printf '')"
+      sleep 0.12
+    done
+    wait "$pid"; rc=$?
+    printf '\r'
+    if [ $rc -ne 0 ]; then
+      printf '%s: failed (exit %d)\n' "$label" "$rc" >&2
+      printf 'Last 200 lines of log for %s:\n' "$label" >&2
+      tail -n 200 "$logfile" >&2 || true
+    else
+      printf '%s: done\n' "$label"
+      if grep -qE '(^==>|^Caveats:|keg-only|Warning:|Caveats)' "$logfile" 2>/dev/null; then
+        printf '%s: has caveats\n' "$label" >> "$CAVEAT_FILE"
+      fi
+    fi
+  else
+    printf '%s: installing (noninteractive)\n' "$label"
+    if "$@" >"$logfile" 2>&1; then
+      printf '%s: installed\n' "$label"
+      if grep -qE '(^==>|^Caveats:|keg-only|Warning:|Caveats)' "$logfile" 2>/dev/null; then
+        printf '%s: has caveats\n' "$label" >> "$CAVEAT_FILE"
+      fi
+    else
+      rc=$?
+      printf '%s: failed (exit %d). See log: %s\n' "$label" "$rc" "$logfile" >&2
+    fi
+  fi
+}
+
 for pkg in "${BREW_PACKAGES[@]}"; do
-  if command -v brew >/dev/null 2>&1 && brew list "$pkg" >/dev/null 2>&1; then printf 'Already installed: %s\n' "$pkg"; else
-    if command -v brew >/dev/null 2>&1; then brew install "$pkg" || printf 'Package %s failed, continuing\n' "$pkg" >&2; fi
+  if command -v brew >/dev/null 2>&1 && brew list "$pkg" >/dev/null 2>&1; then
+    printf 'Already installed: %s\n' "$pkg"
+  else
+    if command -v brew >/dev/null 2>&1; then
+      run_with_spinner "$pkg" brew install "$pkg" || true
+    fi
   fi
 done
 
@@ -141,6 +188,16 @@ fi
 wait 2>/dev/null || true
 sync || true
 sleep 0.1
+
+if [ -f "$CAVEAT_FILE" ] && [ -s "$CAVEAT_FILE" ]; then
+  if IsInteractive; then
+    printf '\nBrew caveats summary:\n'
+    sed -n '1,200p' "$CAVEAT_FILE"
+    printf '\n'
+  else
+    printf '\nSome brew packages reported caveats. Run interactively to see details or inspect logs in: %s\n' "$TMPDIR" >&2
+  fi
+fi
 
 printf '\n############################################\n' >&2
 printf '🎉 pyenv and pyenv-virtualenv setup complete!\n' >&2
