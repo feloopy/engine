@@ -105,4 +105,6 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)" 2>/dev/null || true
 eval "$(pyenv init -)" 2>/dev/null || true
 [ -d "$PYENV_ROOT/plugins/pyenv-virtualenv" ] && eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+clear
 printf '\n🎉 pyenv and pyenv-virtualenv setup complete!\n'
+pyenv

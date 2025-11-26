@@ -115,3 +115,4 @@ eval "$(pyenv init -)" 2>/dev/null || true
 
 clear
 printf '\n🎉 pyenv and pyenv-virtualenv setup complete!\n'
+pyenv
