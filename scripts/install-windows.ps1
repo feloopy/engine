@@ -139,7 +139,7 @@ function Get-AvailablePythonVersions {
     }
 }
 
-# Get installed Python versions
+# Get installed Python versions - CORRECTED VERSION
 function Get-InstalledPythonVersions {
     Write-ColorOutput "Listing installed Python versions..." Yellow
     try {
