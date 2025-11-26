@@ -117,7 +117,9 @@ printf '\n=== Version Selection ===\n'
 printf 'Latest version: \033[1;32m%s\033[0m\n\n' "$LATEST"
 printf 'Please enter the Python version you want to install\nPress Enter to use latest (\033[1;32m%s\033[0m) or type another version: ' "$LATEST"
 SELECTED_VERSION=""
-read -r input_line
+if [ -t 0 ]; then read -r input_line || input_line=""; else
+  if [ -r /dev/tty ]; then read -r input_line </dev/tty || input_line=""; else input_line=""; fi
+fi
 if [ -n "$input_line" ]; then SELECTED_VERSION="$input_line"; else SELECTED_VERSION="$LATEST"; fi
 if ! [[ "$SELECTED_VERSION" =~ ^3\.[0-9]+\.[0-9]+$ ]]; then printf '\nInvalid version format. Please use format: 3.x.x\n' >&2; printf 'Using latest version instead: \033[1;32m%s\033[0m\n' "$LATEST"; SELECTED_VERSION="$LATEST"
 elif ! printf '%s\n' "$ALL_VERSIONS" | grep -Fxq "$SELECTED_VERSION"; then printf '\nVersion %s not found in available versions.\n' "$SELECTED_VERSION" >&2; printf 'Using latest version instead: \033[1;32m%s\033[0m\n' "$LATEST"; SELECTED_VERSION="$LATEST"
