@@ -30,6 +30,7 @@ try{
   }
   Clear-Host
   Write-Host "`n🎉 Done!"
+  pymanager
   Exit 0
 }catch{
   Write-Error $_.Exception.Message
