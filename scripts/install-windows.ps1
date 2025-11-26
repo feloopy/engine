@@ -10,7 +10,8 @@ function Run-Exec($exe,$args,$timeoutSec=15){
   try{
     $p = New-Object System.Diagnostics.Process
     $p.StartInfo.FileName = $exe
-    $p.StartInfo.Arguments = if($args){ [string]::Join(' ',($args|ForEach-Object{ if($_ -match '\s'){"\"$_\""} else {$_}})) } else { '' }
+    $escapedArgs = @()
+    if($args){ foreach($a in $args){ if($a -match '\s'){ $escapedArgs += ('"{0}"' -f $a) } else { $escapedArgs += $a } } ; $p.StartInfo.Arguments = [string]::Join(' ',$escapedArgs) } else { $p.StartInfo.Arguments = '' }
     $p.StartInfo.UseShellExecute = $false
     $p.StartInfo.RedirectStandardOutput = $true
     $p.StartInfo.RedirectStandardError = $true
