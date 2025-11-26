@@ -6,155 +6,155 @@ exit "$code"
 }
 trap 'trap_exit $?' EXIT
 clear
-printf '=== pyenv Manager CLI ===\n\n'
-if [ -z "${HOME:-}" ]; then if [ "$(id -u)" -eq 0 ]; then USER_HOME=/root; else USER_HOME="/home/$(whoami)"; fi; else USER_HOME="$HOME"; fi
-PYENV_ROOT="${PYENV_ROOT:-$USER_HOME/.pyenv}"
-export PYENV_ROOT
-export PATH="$PYENV_ROOT/bin:$PATH"
-DETECTED_SHELL="$(basename "${SHELL:-}")"; if [ -z "$DETECTED_SHELL" ]; then DETECTED_SHELL="$(ps -p $$ -o comm= | awk -F/ '{print $NF}')" ; fi
+printf '=== Engine Installation Script for Linux ===\n\n'
+if [ -z "${HOME:-}" ]; then
+  if [ "$(id -u)" -eq 0 ]; then USER_HOME=/root; else USER_HOME="/home/$(whoami)"; fi
+else USER_HOME="$HOME"
+fi
+if [ -n "${PYENV_ROOT:-}" ]; then PYENV_ROOT="$PYENV_ROOT"; else PYENV_ROOT="$USER_HOME/.pyenv"; fi
+FISH_CFG="$USER_HOME/.config/fish/config.fish"; BASH_RC="$USER_HOME/.bashrc"; BASH_PROFILE="$USER_HOME/.bash_profile"; ZSH_RC="$USER_HOME/.zshrc"; ZSH_PROFILE="$USER_HOME/.zprofile"
+DETECTED_SHELL="$(basename "${SHELL:-}")"
+if [ -z "$DETECTED_SHELL" ]; then DETECTED_SHELL="$(ps -p $$ -o comm= | awk -F/ '{print $NF}')" ; fi
 ARCH="$(uname -m)"
-printf 'Detected OS: %s\n' "$(uname -s)"; printf 'Arch: %s\n' "$ARCH"; printf 'Shell: %s\n' "$DETECTED_SHELL"; printf 'PYENV_ROOT: %s\n\n' "$PYENV_ROOT"
-install_prereqs(){
-OS=""
-if command -v apt-get >/dev/null 2>&1; then OS=debian; sudo apt-get update; sudo apt-get install -y --no-install-recommends build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev git ca-certificates
-elif command -v pacman >/dev/null 2>&1; then OS=arch; sudo pacman -Syu --noconfirm --needed base-devel openssl xz tk libffi bzip2 readline sqlite git curl ca-certificates
-elif command -v dnf >/dev/null 2>&1; then OS=fedora; sudo dnf install -y make gcc zlib-devel bzip2 openssl-devel readline-devel sqlite-devel libffi-devel xz-devel tk-devel git curl ca-certificates
-elif command -v apk >/dev/null 2>&1; then OS=alpine; sudo apk add --no-cache build-base zlib-dev bzip2-dev readline-dev sqlite-dev openssl-dev xz-dev libffi-dev ncurses-dev git curl ca-certificates
+printf 'Detected OS: %s\n' "$(uname -s)"; printf 'Detected architecture: %s\n' "$ARCH"; printf 'Detected shell: %s\n' "$DETECTED_SHELL"; printf 'User home: %s\n' "$USER_HOME"; printf 'Using PYENV_ROOT: %s\n\n' "$PYENV_ROOT"
+OS="unknown"; PKGS=(); PM_CMD=""; PM_INSTALL=""
+if command -v pacman >/dev/null 2>&1; then
+  OS=arch; PM_CMD=pacman; PM_INSTALL='sudo pacman -Syu --noconfirm --needed'; PKGS=(base-devel openssl xz tk libffi bzip2 readline sqlite git curl ca-certificates)
+  if [ "$ARCH" = "x86_64" ]; then PKGS+=(lib32-glibc); elif [ "$ARCH" = "aarch64" ]; then PKGS+=(arm-none-eabi-gcc); fi
+elif command -v apt-get >/dev/null 2>&1; then
+  OS=debian; PM_CMD=apt-get; PM_INSTALL='sudo apt-get install -y --no-install-recommends'; PKGS=(build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev git ca-certificates)
+  if [ "$ARCH" = "x86_64" ]; then PKGS+=(gcc-multilib); elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then PKGS+=(gcc-aarch64-linux-gnu); fi
+elif command -v dnf >/dev/null 2>&1; then
+  OS=fedora; PM_CMD=dnf; PM_INSTALL='sudo dnf install -y'; PKGS=(make gcc zlib-devel bzip2 bzip2-devel openssl-devel readline-devel sqlite-devel libffi-devel xz-devel tk-devel tcl-devel libnsl2-devel git curl ca-certificates)
+elif command -v yum >/dev/null 2>&1; then
+  OS=redhat; PM_CMD=yum; PM_INSTALL='sudo yum install -y'; PKGS=(make gcc zlib-devel bzip2 bzip2-devel openssl-devel readline-devel sqlite-devel libffi-devel xz-devel tk-devel tcl-devel git curl ca-certificates)
+elif command -v zypper >/dev/null 2>&1; then
+  OS=opensuse; PM_CMD=zypper; PM_INSTALL='sudo zypper install -y'; PKGS=(zlib-devel libffi-devel libopenssl-devel libbz2-devel readline-devel sqlite3-devel xz-devel ncurses-devel tk git curl ca-certificates)
+elif command -v apk >/dev/null 2>&1; then
+  OS=alpine; PM_CMD=apk; PM_INSTALL='sudo apk add --no-cache'; PKGS=(build-base zlib-dev bzip2-dev readline-dev sqlite-dev openssl-dev xz-dev libffi-dev ncurses-dev linux-headers git curl ca-certificates)
+else
+  printf 'No known package manager detected; skipping package install\n'
 fi
-}
-bootstrap_pyenv(){
-if [ ! -d "$PYENV_ROOT" ]; then git clone --depth 1 https://github.com/pyenv/pyenv.git "$PYENV_ROOT" || git clone --depth 1 https://ghproxy.com/https://github.com/pyenv/pyenv.git "$PYENV_ROOT"; fi
-mkdir -p "$PYENV_ROOT/plugins"
-if [ ! -d "$PYENV_ROOT/plugins/pyenv-virtualenv" ]; then git clone --depth 1 https://github.com/pyenv/pyenv-virtualenv.git "$PYENV_ROOT/plugins/pyenv-virtualenv" 2>/dev/null || true; fi
+if [ -n "$PM_CMD" ]; then
+  printf 'Installing packages with %s\n' "$PM_CMD"
+  printf 'Packages to install: %s\n' "${PKGS[*]}"
+  case "$PM_CMD" in
+    apt-get) printf 'Updating package database...\n'; sudo apt-get update ;;
+    dnf|yum) printf 'Updating package database...\n'; sudo "$PM_CMD" makecache >/dev/null 2>&1 || true ;;
+    zypper) printf 'Updating package database...\n'; sudo zypper refresh >/dev/null 2>&1 || true ;;
+  esac
+  printf 'Installing packages...\n'
+  start_time=$(date +%s)
+  if eval "$PM_INSTALL ${PKGS[*]}"; then end_time=$(date +%s); duration=$((end_time-start_time)); printf 'Package installation completed successfully in %d seconds\n' "$duration"; else printf 'Package installation failed or requires interaction; continuing\n' >&2; fi
+fi
+if [ ! -d "$PYENV_ROOT" ]; then
+  printf 'Cloning pyenv into %s\n' "$PYENV_ROOT"
+  if git clone --depth 1 https://github.com/pyenv/pyenv.git "$PYENV_ROOT"; then printf 'Pyenv cloned successfully\n'; else
+    printf 'Direct clone failed, trying mirror...\n'
+    if git clone --depth 1 https://ghproxy.com/https://github.com/pyenv/pyenv.git "$PYENV_ROOT"; then printf 'Pyenv cloned successfully from mirror\n'; else printf 'Failed to clone pyenv from all sources\n' >&2; exit 1; fi
+  fi
+fi
 export PATH="$PYENV_ROOT/bin:$PATH"
-if command -v pyenv >/dev/null 2>&1; then true; else if [ -f "$PYENV_ROOT/bin/pyenv" ]; then export PATH="$PYENV_ROOT/bin:$PATH"; fi; fi
-}
-pyenv_available(){ command -v pyenv >/dev/null 2>&1; }
-choose_from_list(){ prompt="$1"; shift; arr=("$@"); if [ ${#arr[@]} -eq 0 ]; then printf 'No options\n'; return 1; fi; printf '%s\n' "$prompt"; for i in "${!arr[@]}"; do printf '  %d) %s\n' $((i+1)) "${arr[$i]}"; done; printf 'Select number: '; read -r sel; if ! [[ "$sel" =~ ^[0-9]+$ ]] || [ "$sel" -lt 1 ] || [ "$sel" -gt ${#arr[@]} ]; then printf 'Invalid\n'; return 1; fi; echo "${arr[$((sel-1))]}"; return 0; }
-set_pyenv_root(){ printf 'Current PYENV_ROOT: %s\nEnter new PYENV_ROOT or press Enter to keep: ' "$PYENV_ROOT"; read -r new; if [ -n "$new" ]; then PYENV_ROOT="${new/#\~/$HOME}"; export PYENV_ROOT; export PATH="$PYENV_ROOT/bin:$PATH"; mkdir -p "$PYENV_ROOT"; fi; printf 'PYENV_ROOT=%s\n' "$PYENV_ROOT"; }
-list_versions(){ pyenv_available || { printf 'pyenv missing\n'; return; }; pyenv versions || true; }
-list_available_versions(){
-if pyenv_available; then VERS="$(pyenv install --list 2>/dev/null | grep -E '^[[:space:]]*3\.[0-9]+\.[0-9]+' | sed 's/^[[:space:]]*//' | sort -Vr | uniq)"; fi
-if [ -z "$VERS" ]; then VERS="$(curl -s https://registry.npmmirror.com/-/binary/python/ | grep -oE '3\.[0-9]+\.[0-9]+' | sort -Vr | uniq)"; fi
-mapfile -t VERS_ARR < <(printf '%s\n' "$VERS")
-printf '%s\n' "${VERS_ARR[@]}"
-}
-install_python(){
-pyenv_available || { printf 'pyenv not found, bootstrapping\n'; bootstrap_pyenv; }
-mapfile -t VERS < <(list_available_versions)
-if [ ${#VERS[@]} -eq 0 ]; then printf 'No versions discovered\n'; return; fi
-choice=$(choose_from_list 'Choose Python version to install:' "${VERS[@]}") || return
-printf 'Optional: custom PYENV_ROOT for this install or press Enter to skip: '; read -r tmp; if [ -n "$tmp" ]; then export PYENV_ROOT="${tmp/#\~/$HOME}"; export PATH="$PYENV_ROOT/bin:$PATH"; fi
-if pyenv versions --bare | grep -Fxq "$choice"; then printf '%s already installed\n' "$choice"; else pyenv install "$choice" || { printf 'install failed\n' >&2; return 1; }; fi
-printf 'Set as global? (y/N): '; read -r g; if [ "$g" = "y" ] || [ "$g" = "Y" ]; then pyenv global "$choice"; fi
-}
-uninstall_python(){
-pyenv_available || { printf 'pyenv not found\n'; return; }
-mapfile -t INST < <(pyenv versions --bare 2>/dev/null)
-if [ ${#INST[@]} -eq 0 ]; then printf 'No installed versions\n'; return; fi
-choice=$(choose_from_list 'Choose installed Python to remove:' "${INST[@]}") || return
-pyenv uninstall -f "$choice" 2>/dev/null || rm -rf "$PYENV_ROOT/versions/$choice"
-printf 'Removed %s\n' "$choice"
-}
-create_venv(){
-pyenv_available || { printf 'pyenv not found\n'; return; }
-mapfile -t INST < <(pyenv versions --bare 2>/dev/null)
-if [ ${#INST[@]} -eq 0 ]; then printf 'No installed Python versions\n'; return; fi
-base=$(choose_from_list 'Choose base Python for virtualenv:' "${INST[@]}") || return
-printf 'Enter virtualenv name: '; read -r vname; [ -z "$vname" ] && { printf 'Name required\n'; return; }
-printf 'Optional: custom PYENV_ROOT for this operation or press Enter: '; read -r tmp; if [ -n "$tmp" ]; then export PYENV_ROOT="${tmp/#\~/$HOME}"; export PATH="$PYENV_ROOT/bin:$PATH"; fi
-if command -v pyenv-virtualenv >/dev/null 2>&1; then pyenv virtualenv "$base" "$vname" && printf 'Created virtualenv %s\n' "$vname" || printf 'Failed\n' >&2; else mkdir -p "$PYENV_ROOT/versions/$vname"; "$PYENV_ROOT/versions/$base/bin/python" -m venv "$PYENV_ROOT/versions/$vname" && printf 'Created venv at %s/versions/%s\n' "$PYENV_ROOT" "$vname"; fi
-}
-delete_venv(){
-pyenv_available || { printf 'pyenv not found\n'; return; }
-mapfile -t VENV < <(pyenv virtualenvs --bare 2>/dev/null)
-if [ ${#VENV[@]} -eq 0 ]; then printf 'No virtualenvs\n'; return; fi
-choice=$(choose_from_list 'Choose virtualenv to delete:' "${VENV[@]}") || return
-printf 'Confirm delete %s? (y/N): ' "$choice"; read -r c; if [ "$c" = "y" ] || [ "$c" = "Y" ]; then pyenv virtualenv-delete -f "$choice" 2>/dev/null || rm -rf "$PYENV_ROOT/versions/$choice"; printf 'Deleted %s\n' "$choice"; fi
-}
-list_venvs(){ pyenv_available || { printf 'pyenv not found\n'; return; }; pyenv virtualenvs || printf 'No virtualenvs\n'; }
-show_deps_from_pypi(){
-pkg="$1"; ver="$2"
-if [ -z "$ver" ]; then url="https://pypi.org/pypi/${pkg}/json"; else url="https://pypi.org/pypi/${pkg}/${ver}/json"; fi
-json="$(curl -sS "$url" 2>/dev/null)" || { printf 'Failed fetching metadata\n'; return 1; }
-deps="$(python - <<PY
-import sys,json
-try:
- d=json.load(sys.stdin)
- reqs=d.get('info',{}).get('requires_dist') or []
- for r in reqs: print(r)
-except Exception as e:
- pass
-PY
-<<<"$json")"
-if [ -z "$deps" ]; then printf 'No requires_dist metadata or package not on PyPI\n'; return 2; fi
-printf 'Dependencies for %s %s:\n' "$pkg" "${ver:-latest}"
-printf '%s\n' "$deps"
-return 0
-}
-install_package_in_venv(){
-pyenv_available || { printf 'pyenv not found\n'; return; }
-mapfile -t VENV < <(pyenv virtualenvs --bare 2>/dev/null)
-if [ ${#VENV[@]} -eq 0 ]; then printf 'No virtualenvs\n'; return; fi
-venv=$(choose_from_list 'Choose virtualenv to install into:' "${VENV[@]}") || return
-printf 'Enter package name (example: requests): '; read -r pkg; [ -z "$pkg" ] && { printf 'Package required\n'; return; }
-printf 'Enter extras/variant without brackets, comma separated if many or press Enter to skip (example: socks): '; read -r extras
-printf 'Enter version or git ref or github url or press Enter for latest: '; read -r ver
-spec="$pkg"
-if [ -n "$extras" ]; then spec="${spec}[${extras// /}]"; fi
-if [ -n "$ver" ]; then
- if [[ "$ver" =~ ^(git\+|https?://|git@|github.com) ]]; then spec="$ver"
- elif [[ "$ver" =~ ^(owner/|.+/.+@) ]]; then spec="git+https://github.com/${ver}"
- elif [[ "$ver" =~ ^gh: ]]; then ref="${ver#gh:}"; spec="git+https://github.com/feloopy/${pkg}.git@${ref}"
- else spec="${spec}==${ver}"
- fi
+mkdir -p "$PYENV_ROOT/plugins"
+if [ ! -d "$PYENV_ROOT/plugins/pyenv-virtualenv" ]; then
+  printf 'Cloning pyenv-virtualenv\n'
+  if git clone --depth 1 https://github.com/pyenv/pyenv-virtualenv.git "$PYENV_ROOT/plugins/pyenv-virtualenv"; then printf 'Pyenv-virtualenv cloned successfully\n'; else printf 'Failed to clone pyenv-virtualenv, continuing without it\n' >&2; fi
 fi
-if [[ "$spec" =~ ^git\+ ]]; then printf 'VCS install spec: %s\n' "$spec"; printf 'Cannot reliably fetch PyPI dependencies for VCS installs\n'; else show_deps_from_pypi "$pkg" "${ver}" ; dep_status=$?; fi
-printf '\nProceed to install %s into %s? (y/N): ' "$spec" "$venv"; read -r ok
-if [ "$ok" != "y" ] && [ "$ok" != "Y" ]; then printf 'Cancelled\n'; return; fi
-PYBIN="$PYENV_ROOT/versions/$venv/bin/python"
-PIP="$PYENV_ROOT/versions/$venv/bin/pip"
-if [ ! -x "$PIP" ]; then if [ -x "$PYBIN" ]; then "$PYBIN" -m ensurepip --upgrade >/dev/null 2>&1 || true; fi; fi
-"$PIP" install "$spec" || { printf 'Install failed\n' >&2; return 1; }
-printf 'Installed %s into %s\n' "$spec" "$venv"
-}
-modify_venv_menu(){
-pyenv_available || { printf 'pyenv not found\n'; return; }
-mapfile -t VENV < <(pyenv virtualenvs --bare 2>/dev/null)
-if [ ${#VENV[@]} -eq 0 ]; then printf 'No virtualenvs\n'; return; fi
-v=$(choose_from_list 'Select virtualenv to manage:' "${VENV[@]}") || return
-while true; do printf '\nManaging %s\n1) List packages\n2) Install package\n3) Uninstall package\n4) Freeze to requirements.txt\n5) Rename virtualenv\n6) Back\nChoose: ' "$v"; read -r o
-pip="$PYENV_ROOT/versions/$v/bin/pip"
-case "$o" in
-1) "$pip" list || printf 'Failed\n' ;;
-2) install_package_in_venv ;;
-3) printf 'Enter package names to uninstall (space separated): '; read -r pkgs; [ -n "$pkgs" ] && "$pip" uninstall -y $pkgs || printf 'No packages\n' ;;
-4) "$pip" freeze > "$PYENV_ROOT/versions/$v/requirements.txt" && printf 'Wrote requirements.txt\n' ;;
-5) printf 'Enter new name: '; read -r new; [ -z "$new" ] && printf 'Name required\n' || { cp -a "$PYENV_ROOT/versions/$v" "$PYENV_ROOT/versions/$new" && rm -rf "$PYENV_ROOT/versions/$v" && printf 'Renamed %s to %s\n' "$v" "$new" && pyenv rehash >/dev/null 2>&1 || true; break; } ;;
-6) break ;;
-*) printf 'Invalid\n' ;;
-esac
+files=("$FISH_CFG" "$BASH_RC" "$BASH_PROFILE" "$ZSH_RC" "$ZSH_PROFILE")
+for f in "${files[@]}"; do
+  if [ -n "$f" ]; then d=$(dirname "$f"); if [ -n "$d" ]; then mkdir -p "$d" 2>/dev/null || printf 'Warning: Could not create directory %s\n' "$d" >&2; fi; if [ ! -f "$f" ]; then touch "$f" 2>/dev/null || printf 'Warning: Could not create file %s\n' "$f" >&2; fi; fi
 done
-}
-main_menu(){
-bootstrap_pyenv
-while true; do clear; printf '=== pyenv Manager ===\nPYENV_ROOT: %s\n\n1) Install Python interpreter\n2) Uninstall Python interpreter\n3) Create virtualenv\n4) Delete virtualenv\n5) Manage virtualenv (install packages, list, rename)\n6) List installed Python versions\n7) List virtualenvs\n8) Set/change PYENV_ROOT\n9) Install package into virtualenv (quick)\n0) Exit\nChoose: ' "$PYENV_ROOT"; read -r opt
-case "$opt" in
-1) install_prereqs; install_python ;;
-2) uninstall_python ;;
-3) create_venv ;;
-4) delete_venv ;;
-5) modify_venv_menu ;;
-6) list_versions; printf '\nPress Enter to continue...'; read -r _ ;;
-7) list_venvs; printf '\nPress Enter to continue...'; read -r _ ;;
-8) set_pyenv_root ;;
-9) install_package_in_venv ;;
-0) printf 'Goodbye\n'; break ;;
-*) printf 'Invalid\n'; sleep 1 ;;
-esac
-done
-}
-main_menu
+_add_if_missing(){ file="$1"; pattern="$2"; line="$3"; if [ -z "$file" ]; then return 1; fi; if [ -f "$file" ]; then if ! grep -Fq -- "$pattern" "$file" 2>/dev/null; then printf '%s\n' "$line" >> "$file"; printf 'Added to %s: %s\n' "$file" "$pattern"; fi else printf '%s\n' "$line" > "$file"; printf 'Created %s with: %s\n' "$file" "$pattern"; fi }
+printf '\nConfiguring shell...\n'
+fish_config="$USER_HOME/.config/fish/config.fish"
+if [ "$DETECTED_SHELL" = "fish" ]; then
+  printf 'Configuring fish shell...\n'
+  mkdir -p "$(dirname "$fish_config")"
+  touch "$fish_config"
+  _add_if_missing "$fish_config" 'set -Ux PYENV_ROOT' 'set -Ux PYENV_ROOT $HOME/.pyenv'
+  _add_if_missing "$fish_config" 'fish_user_paths $PYENV_ROOT/bin' 'set -U fish_user_paths $PYENV_ROOT/bin $fish_user_paths'
+  _add_if_missing "$fish_config" 'pyenv init --path' 'status is-login; and pyenv init --path | source'
+  _add_if_missing "$fish_config" 'pyenv init -' 'status is-interactive; and pyenv init - | source'
+  _add_if_missing "$fish_config" 'pyenv virtualenv-init -' 'status is-interactive; and pyenv virtualenv-init - | source'
+elif [ "$DETECTED_SHELL" = "bash" ] || [ "$DETECTED_SHELL" = "sh" ]; then
+  printf 'Configuring bash shell...\n'
+  _add_if_missing "$BASH_RC" 'export PYENV_ROOT' 'export PYENV_ROOT="$HOME/.pyenv"'
+  _add_if_missing "$BASH_RC" 'export PATH="$PYENV_ROOT/bin:$PATH"' 'export PATH="$PYENV_ROOT/bin:$PATH"'
+  _add_if_missing "$BASH_PROFILE" 'pyenv init --path' 'eval "$(pyenv init --path)"'
+  _add_if_missing "$BASH_RC" 'pyenv init -' 'eval "$(pyenv init -)"'
+  _add_if_missing "$BASH_RC" 'pyenv virtualenv-init -' 'eval "$(pyenv virtualenv-init -)"'
+elif [ "$DETECTED_SHELL" = "zsh" ]; then
+  printf 'Configuring zsh shell...\n'
+  _add_if_missing "$ZSH_RC" 'export PYENV_ROOT' 'export PYENV_ROOT="$HOME/.pyenv"'
+  _add_if_missing "$ZSH_RC" 'export PATH="$PYENV_ROOT/bin:$PATH"' 'export PATH="$PYENV_ROOT/bin:$PATH"'
+  _add_if_missing "$ZSH_PROFILE" 'pyenv init --path' 'eval "$(pyenv init --path)"'
+  _add_if_missing "$ZSH_RC" 'pyenv init -' 'eval "$(pyenv init -)"'
+  _add_if_missing "$ZSH_RC" 'pyenv virtualenv-init -' 'eval "$(pyenv virtualenv-init -)"'
+fi
+if command -v pyenv >/dev/null 2>&1; then
+  if [[ $- == *i* ]]; then pyenv init - | source >/dev/null 2>&1; pyenv init --path | source >/dev/null 2>&1; { command -v pyenv-virtualenv >/dev/null 2>&1 && pyenv virtualenv-init - | source >/dev/null 2>&1; } || true; fi
+fi
 clear
-printf 'Final pyenv versions:\n'; pyenv versions 2>/dev/null || true
-printf '\nDone\n'
+printf '=== Python Version Selection ===\n\n'
+printf 'Fetching available Python versions...\n'
+ALL_VERSIONS="$(pyenv install --list 2>/dev/null | grep -E '^[[:space:]]*3\.[0-9]+\.[0-9]+$' | sed 's/^[[:space:]]*//')"
+if [ -z "$ALL_VERSIONS" ]; then
+  printf 'Could not fetch available Python versions\nTrying alternative method...\n'
+  ALL_VERSIONS="$(curl -s https://registry.npmmirror.com/-/binary/python/ | grep -oE '3\.[0-9]+\.[0-9]+/' | grep -oE '3\.[0-9]+\.[0-9]+' | sort -Vr | uniq | head -20)"
+fi
+if [ -z "$ALL_VERSIONS" ]; then printf 'Error: Could not retrieve Python version list\n' >&2; exit 1; fi
+MAJOR_VERSIONS="$(printf '%s\n' "$ALL_VERSIONS" | awk -F. '$1==3 && $2>=10 {mm=$1"."$2; if(!(mm in latest)||$3>latest[mm]){latest[mm]=$3; versions[mm]=$0}} END{for(i in versions) print versions[i]}' | sort -Vr)"
+LATEST="$(printf '%s\n' "$MAJOR_VERSIONS" | head -n1)"
+printf 'Latest versions of each Python major release (3.10+):\n'
+printf '┌─────────────┬────────────┐\n'; printf '│ Version     │ Status     │\n'; printf '├─────────────┼────────────┤\n'
+while IFS= read -r v; do
+  if pyenv versions --bare 2>/dev/null | grep -Fxq "$v" >/dev/null 2>&1; then printf '│ %-11s │ %-10s │\n' "$v" "INSTALLED"; else printf '│ %-11s │ %-10s │\n' "$v" "Available"; fi
+done <<< "$(printf '%s\n' "$MAJOR_VERSIONS")"
+printf '└─────────────┴────────────┘\n'
+printf '\nCurrently installed versions:\n'
+pyenv versions 2>/dev/null || printf '  No versions installed yet\n'
+printf '\n=== Version Selection ===\n'
+printf 'Latest version: \033[1;32m%s\033[0m\n\n' "$LATEST"
+printf 'Please enter the Python version you want to install\nPress Enter to use latest (\033[1;32m%s\033[0m) or type another version: ' "$LATEST"
+SELECTED_VERSION=""
+if [ -t 0 ]; then read -r input_line || input_line=""; else
+  if [ -r /dev/tty ]; then read -r input_line </dev/tty || input_line=""; else input_line=""; fi
+fi
+if [ -n "$input_line" ]; then SELECTED_VERSION="$input_line"; else SELECTED_VERSION="$LATEST"; fi
+if ! [[ "$SELECTED_VERSION" =~ ^3\.[0-9]+\.[0-9]+$ ]]; then printf '\nInvalid version format. Please use format: 3.x.x\n' >&2; printf 'Using latest version instead: \033[1;32m%s\033[0m\n' "$LATEST"; SELECTED_VERSION="$LATEST"
+elif ! printf '%s\n' "$ALL_VERSIONS" | grep -Fxq "$SELECTED_VERSION"; then printf '\nVersion %s not found in available versions.\n' "$SELECTED_VERSION" >&2; printf 'Using latest version instead: \033[1;32m%s\033[0m\n' "$LATEST"; SELECTED_VERSION="$LATEST"
+else printf '\nSelected version: \033[1;32m%s\033[0m\n' "$SELECTED_VERSION"; fi
+clear
+printf '=== Installing Python %s ===\n\n' "$SELECTED_VERSION"
+if pyenv versions --bare 2>/dev/null | grep -Fxq "$SELECTED_VERSION" >/dev/null 2>&1; then printf 'Python %s already installed, skipping installation\n' "$SELECTED_VERSION"
+else
+  printf 'Installing Python %s (this may take several minutes)...\n' "$SELECTED_VERSION"
+  install_start=$(date +%s)
+  if pyenv install "$SELECTED_VERSION"; then install_end=$(date +%s); install_duration=$((install_end-install_start)); printf '✅ Python %s installed successfully in %d seconds\n' "$SELECTED_VERSION" "$install_duration"; else printf '❌ Python %s installation failed\n' "$SELECTED_VERSION" >&2; printf 'Continuing with existing installations...\n'; fi
+fi
+printf 'Setting Python %s as global default...\n' "$SELECTED_VERSION"
+pyenv global "$SELECTED_VERSION" >/dev/null 2>&1 || true
+clear
+printf '=== Installation Complete ===\n\n'
+printf 'Active python: \033[1;32m%s\033[0m\n' "$(python --version 2>&1)"
+printf 'Python location: %s\n' "$(which python 2>/dev/null || echo 'Not found')"
+printf 'pip location: %s\n' "$(which pip 2>/dev/null || echo 'Not found')"
+printf '\nInstalled Python versions:\n'
+pyenv versions
+printf '\n=== Usage Examples for Python %s ===\n' "$SELECTED_VERSION"
+printf '  List available versions: pyenv install --list | grep -E \"^\\\\s*3\\\\.[0-9]+\\\\.[0-9]+$\"\n'
+printf '  Install specific version: pyenv install 3.x.x\n'
+printf '  Set global version: pyenv global %s\n' "$SELECTED_VERSION"
+printf '  Set local version: pyenv local %s\n' "$SELECTED_VERSION"
+printf '  Create virtualenv: pyenv virtualenv %s my-project-env\n' "$SELECTED_VERSION"
+printf '  Activate virtualenv: pyenv activate my-project-env\n'
+printf '  Deactivate virtualenv: pyenv deactivate\n'
+printf '  List virtualenvs: pyenv virtualenvs\n'
+printf '\n=== Important Notes ===\n'
+printf '• To use pyenv in new terminal sessions, restart your terminal or run:\n'
+printf '    exec %s -l\n' "$DETECTED_SHELL"
+printf '• Project-specific Python: create .python-version file in project directory\n'
+printf '• Virtual environments isolate Python environments for different projects\n'
+printf '• System architecture: %s (%s)\n' "$ARCH" "$(uname -s)"
+printf '• Package manager: %s\n' "$( [ -n "$PM_CMD" ] && echo "$PM_CMD" || echo "None detected" )"
+printf '\n🎉 pyenv+cpython installation completed successfully!\n   ! 🐍\n'
