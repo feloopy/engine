@@ -79,7 +79,11 @@ elif [ "$DETECTED_SHELL" = "zsh" ]; then
   _add_if_missing "$ZSH_RC" 'pyenv virtualenv-init -' 'eval "$(pyenv virtualenv-init -)"'
 fi
 if command -v pyenv >/dev/null 2>&1; then
-  case "$-" in *i*) eval "$(pyenv init --path)" 2>/dev/null || true; eval "$(pyenv init -)" 2>/dev/null || true; command -v pyenv-virtualenv >/dev/null 2>&1 && eval "$(pyenv virtualenv-init -)" 2>/dev/null || true ;; esac
+  eval "$(pyenv init --path)" 2>/dev/null || true
+  eval "$(pyenv init -)" 2>/dev/null || true
+  if [ -d "$PYENV_ROOT/plugins/pyenv-virtualenv" ]; then
+    eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+  fi
 fi
 clear
 printf '\n🎉 Done!\n'
