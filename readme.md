@@ -22,9 +22,6 @@ curl -fsSL https://raw.githubusercontent.com/feloopy/engine/main/scripts/install
 
 (Powershell)
 
-Invoke-RestMethod -Uri ("https://raw.githubusercontent.com/OWNER/REPO/BRANCH/path/to/install-windows.ps1?t={0}" -f ([int](Get-Date -UFormat %s))) | Invoke-Expression
-
-
 ```ps
 $t=[int](Get-Date -UFormat %s); Invoke-RestMethod "https://raw.githubusercontent.com/feloopy/engine/main/scripts/install-windows.ps1?t=$t" | Invoke-Expression
 ```
