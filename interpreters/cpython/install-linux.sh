@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-clear
-
+:
 USER_HOME="${HOME:-$( [ "$(id -u)" -eq 0 ] && echo /root || echo /home/$(whoami) )}"
 PYENV_ROOT="${PYENV_ROOT:-$USER_HOME/.pyenv}"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$USER_HOME/.config}"
@@ -9,21 +8,17 @@ DETECTED_SHELL="${SHELL:+$(basename "$SHELL")}"
 [ -z "$DETECTED_SHELL" ] && [ -r "/proc/$$/cmdline" ] && DETECTED_SHELL="$(tr '\0' ' ' < /proc/$$/cmdline | awk '{print $1}' | awk -F/ '{print $NF}')"
 [ -z "$DETECTED_SHELL" ] && DETECTED_SHELL="$(ps -p $$ -o comm= 2>/dev/null | awk -F/ '{print $NF}' || true)"
 DETECTED_SHELL="$(echo "${DETECTED_SHELL:-}" | tr '[:upper:]' '[:lower:]')"
-
 BASH_RC="$USER_HOME/.bashrc"; BASH_PROFILE="$USER_HOME/.bash_profile"; PROFILE="$USER_HOME/.profile"
 ZSH_RC="${ZDOTDIR:-$USER_HOME}/.zshrc"; ZSH_PROFILE="${ZDOTDIR:-$USER_HOME}/.zprofile"
 FISH_CFG="$XDG_CONFIG_HOME/fish/config.fish"
-
 PKG_MANAGER=""
-if command -v apt-get >/dev/null 2>&1; then PKG_MANAGER="apt";
-elif command -v dnf >/dev/null 2>&1; then PKG_MANAGER="dnf";
-elif command -v yum >/dev/null 2>&1; then PKG_MANAGER="yum";
-elif command -v pacman >/dev/null 2>&1; then PKG_MANAGER="pacman";
-elif command -v zypper >/dev/null 2>&1; then PKG_MANAGER="zypper";
+if command -v apt-get >/dev/null 2>&1; then PKG_MANAGER="apt"
+elif command -v dnf >/dev/null 2>&1; then PKG_MANAGER="dnf"
+elif command -v yum >/dev/null 2>&1; then PKG_MANAGER="yum"
+elif command -v pacman >/dev/null 2>&1; then PKG_MANAGER="pacman"
+elif command -v zypper >/dev/null 2>&1; then PKG_MANAGER="zypper"
 fi
-
 printf 'Detected package manager: %s\n' "$PKG_MANAGER"
-
 install_prereqs(){
   case "$PKG_MANAGER" in
     apt)
@@ -39,10 +34,7 @@ install_prereqs(){
       ;;
     pacman)
       PACMAN_PKGS=(base-devel curl git bzip2 xz tk libffi)
-      # Avoid zlib conflict on CachyOS/Arch derivatives
-      if ! pacman -Q zlib-ng-compat >/dev/null 2>&1; then
-        PACMAN_PKGS+=(zlib)
-      fi
+      if ! pacman -Q zlib-ng-compat >/dev/null 2>&1; then PACMAN_PKGS+=(zlib); fi
       sudo pacman -Syu --noconfirm "${PACMAN_PKGS[@]}"
       ;;
     zypper)
@@ -54,17 +46,15 @@ install_prereqs(){
       ;;
   esac
 }
-
 install_prereqs
-
 mkdir -p "$PYENV_ROOT/plugins"
 if [ ! -d "$PYENV_ROOT" ]; then
   git clone --depth 1 https://github.com/pyenv/pyenv.git "$PYENV_ROOT" || git clone --depth 1 https://ghproxy.com/https://github.com/pyenv/pyenv.git "$PYENV_ROOT" || true
 fi
-if [ ! -d "$PYENV_ROOT/plugins/pyenv-virtualenv" ]; then git clone --depth 1 https://github.com/pyenv/pyenv-virtualenv.git "$PYENV_ROOT/plugins/pyenv-virtualenv" || true; fi
-
+if [ ! -d "$PYENV_ROOT/plugins/pyenv-virtualenv" ]; then
+  git clone --depth 1 https://github.com/pyenv/pyenv-virtualenv.git "$PYENV_ROOT/plugins/pyenv-virtualenv" || true
+fi
 _add_if_missing(){ file="$1"; pattern="$2"; line="$3"; [ -z "$file" ] && return 1; mkdir -p "$(dirname "$file")"; if [ -f "$file" ]; then if ! grep -Fq -- "$pattern" "$file" 2>/dev/null; then printf '%s\n' "$line" >> "$file"; fi; else printf '%s\n' "$line" > "$file"; fi }
-
 case "$DETECTED_SHELL" in
   *fish*)
     mkdir -p "$(dirname "$FISH_CFG")"
@@ -99,12 +89,22 @@ case "$DETECTED_SHELL" in
     _add_if_missing "$PROFILE" 'eval "$(pyenv init --path)"' 'eval "$(pyenv init --path)"'
     ;;
 esac
-
 hash -r 2>/dev/null || true
 export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)" 2>/dev/null || true
-eval "$(pyenv init -)" 2>/dev/null || true
-[ -d "$PYENV_ROOT/plugins/pyenv-virtualenv" ] && eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
-clear
+if [ -x "$PYENV_ROOT/bin/pyenv" ]; then
+  eval "$("$PYENV_ROOT/bin/pyenv" init --path)" 2>/dev/null || true
+  eval "$("$PYENV_ROOT/bin/pyenv" init -)" 2>/dev/null || true
+  if [ -d "$PYENV_ROOT/plugins/pyenv-virtualenv" ] && [ -x "$PYENV_ROOT/plugins/pyenv-virtualenv/bin/pyenv-virtualenv" ] 2>/dev/null; then
+    eval "$("$PYENV_ROOT/bin/pyenv" virtualenv-init -)" 2>/dev/null || true
+  fi
+else
+  printf 'Warning: pyenv binary not found at %s. The clone may have failed or permissions prevent execution.\n' "$PYENV_ROOT/bin/pyenv" >&2
+fi
+:
 printf '\n🎉 pyenv and pyenv-virtualenv setup complete!\n'
-pyenv
+if [ -x "$PYENV_ROOT/bin/pyenv" ]; then
+  "$PYENV_ROOT/bin/pyenv" --version || true
+  "$PYENV_ROOT/bin/pyenv" root || true
+else
+  command -v pyenv >/dev/null 2>&1 && pyenv --version || printf 'pyenv not available in this shell\n'
+fi
