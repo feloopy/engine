@@ -16,8 +16,10 @@ function Invoke-ProcessWithTimeout([string]$exe, [string[]]$argList, [int]$timeo
     $outFile = Join-Path $env:TEMP ([guid]::NewGuid().ToString() + '.out')
     $errFile = Join-Path $env:TEMP ([guid]::NewGuid().ToString() + '.err')
     try {
-        $psi = Start-Process -FilePath $exe -ArgumentList $argList `
-            -RedirectStandardOutput $outFile -RedirectStandardError $errFile `
+        $psi = Start-Process -FilePath $exe `
+            -ArgumentList $argList `
+            -RedirectStandardOutput $outFile `
+            -RedirectStandardError $errFile `
             -NoNewWindow -PassThru -ErrorAction Stop
 
         $waitMs = [int]($timeoutSec * 1000)
@@ -58,22 +60,44 @@ function Invoke-ProcessWithTimeout([string]$exe, [string[]]$argList, [int]$timeo
     }
 }
 
+function Exec-Command([string]$exe, [string[]]$argList, [int]$timeoutSec) {
+    if (-not $exe) { return @{ Success = $false; Err = 'No executable specified'; Code = -3 } }
+
+    $ext = [IO.Path]::GetExtension($exe)
+    if ($ext -match '^(?i)\.cmd$|^(?i)\.bat$') {
+        $quotedArgs = @()
+        foreach ($a in $argList) {
+            if ($a -match '\s') { $quotedArgs += '"' + $a.Replace('"','\"') + '"' } else { $quotedArgs += $a }
+        }
+        $cmdString = '"' + $exe + '" ' + ($quotedArgs -join ' ')
+        return Invoke-ProcessWithTimeout 'cmd.exe' @('/c', $cmdString) $timeoutSec
+    }
+
+    try {
+        return Invoke-ProcessWithTimeout $exe $argList $timeoutSec
+    } catch {
+        Log('Exec-Command fallback: failed to run ' + $exe + ' directly, trying via cmd.exe /c')
+        $quotedArgs = @()
+        foreach ($a in $argList) {
+            if ($a -match '\s') { $quotedArgs += '"' + $a.Replace('"','\"') + '"' } else { $quotedArgs += $a }
+        }
+        $cmdString = '"' + $exe + '" ' + ($quotedArgs -join ' ')
+        return Invoke-ProcessWithTimeout 'cmd.exe' @('/c', $cmdString) $timeoutSec
+    }
+}
+
 function Try-RunExe([string]$exe, [string[]]$argList, [int]$timeoutSec = 30) {
     try {
-        if (-not $exe) { return @{ Success = $false; Msg = 'No executable specified' } }
-        $res = Invoke-ProcessWithTimeout $exe $argList $timeoutSec
-        Log('Try-RunExe: "' + $exe + '" args=[' + ($argList -join ' ') + '] Success=' + $res.Success + ' Exit=' + $res.ExitCode + ' TimedOut=' + $res.TimedOut)
-        return @{
-            Success = $res.Success
-            Out     = $res.StdOut
-            Err     = $res.StdErr
-            Code    = $res.ExitCode
-            TimedOut= $res.TimedOut
-        }
+        $r = Exec-Command $exe $argList $timeoutSec
+        $out = $r.StdOut
+        $err = $r.StdErr
+        $code = $r.ExitCode
+        Log('Try-RunExe: "' + $exe + '" args=[' + ($argList -join ' ') + '] Success=' + $r.Success + ' Exit=' + $code + ' TimedOut=' + $r.TimedOut)
+        return @{ Success = $r.Success; Out = $out; Err = $err; Code = $code; TimedOut = $r.TimedOut }
     }
     catch {
         Log('Try-RunExe caught for "' + $exe + '": ' + $_.ToString())
-        return @{ Success = $false; Err = $_.ToString() }
+        return @{ Success = $false; Err = $_.ToString(); Code = -99 }
     }
 }
 
@@ -81,9 +105,9 @@ function Run-Command([string]$cmd, [int]$timeoutSec = 120) {
     for ($i = 1; $i -le $RetryCount; $i++) {
         Log('RUN: ' + $cmd + ' (attempt ' + $i + ')')
         try {
-            $r = Invoke-ProcessWithTimeout 'powershell.exe' @('-NoProfile','-NonInteractive','-Command',$cmd) $timeoutSec
+            $r = Exec-Command 'powershell.exe' @('-NoProfile','-NonInteractive','-Command',$cmd) $timeoutSec
             Log('RUN result: Success=' + $r.Success + ' Exit=' + $r.ExitCode + ' TimedOut=' + $r.TimedOut)
-            return @{ Success = $r.Success; Output = $r.StdOut; Err = $r.StdErr; Code = $r.ExitCode; TimedOut = $r.TimedOut }
+            return @{ Success = $r.Success; Output = $r.StdOut; Err = $r.StdErr; Code = $r.ExitCode }
         }
         catch {
             Log('Run-Command error for "' + $cmd + '": ' + $_.ToString())
@@ -107,14 +131,12 @@ function Resolve-CodeExe([string]$Path) {
             $cand = Join-Path (Split-Path $parent -Parent) 'Code.exe'
             if (Test-Path $cand) { return (Get-Item $cand).FullName }
         }
-
         $known = @(
             "$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe",
             "$env:ProgramFiles\Microsoft VS Code\Code.exe",
             "$env:ProgramFiles(x86)\Microsoft VS Code\Code.exe"
         )
         foreach ($k in $known) { if (Test-Path $k) { return (Get-Item $k).FullName } }
-
         $g = Get-Command code -ErrorAction SilentlyContinue
         if ($g -and $g.Source -and (Test-Path $g.Source)) { return (Get-Item $g.Source).FullName }
     }
@@ -127,7 +149,6 @@ function Resolve-CodeExe([string]$Path) {
 function Install-Ext([string]$extId) {
     try {
         if (-not $CodeExe) { Log('Skipping install of ' + $extId + ' because code CLI unresolved'); return $false }
-
         Log('Install-Ext: checking installed extensions for ' + $extId + ' using CodeExe="' + $CodeExe + '"')
         $resList = Try-RunExe $CodeExe @('--list-extensions','--show-versions') 20
         $installed = @()
@@ -142,7 +163,6 @@ function Install-Ext([string]$extId) {
         for ($attempt = 1; $attempt -le $RetryCount; $attempt++) {
             Log('Installing extension "' + $extId + '" (attempt ' + $attempt + ') via "' + $CodeExe + '"')
             $r = Try-RunExe $CodeExe @('--install-extension', $extId, '--force') 120
-
             if ($r.Out) { Log('StdOut: ' + ($r.Out.Substring(0, [math]::Min(2000, $r.Out.Length)))) }
             if ($r.Err) { Log('StdErr: ' + ($r.Err.Substring(0, [math]::Min(2000, $r.Err.Length)))) }
 
@@ -159,15 +179,13 @@ function Install-Ext([string]$extId) {
             }
 
             Log('Install attempt failed for "' + $extId + '". Trying isolated dirs. lastExit=' + $r.Code + ' timedOut=' + $r.TimedOut)
-
             $tmpUser = Join-Path $env:TEMP ([guid]::NewGuid().ToString())
             $tmpExt  = Join-Path $env:TEMP ([guid]::NewGuid().ToString())
             New-Item -ItemType Directory -Force -Path $tmpUser | Out-Null
             New-Item -ItemType Directory -Force -Path $tmpExt  | Out-Null
-
             Log('Isolated install dirs user="' + $tmpUser + '" extensions="' + $tmpExt + '"')
-            $r2 = Try-RunExe $CodeExe @('--user-data-dir', $tmpUser, '--extensions-dir', $tmpExt, '--install-extension', $extId, '--force') 180
 
+            $r2 = Try-RunExe $CodeExe @('--user-data-dir', $tmpUser, '--extensions-dir', $tmpExt, '--install-extension', $extId, '--force') 180
             if ($r2.Out) { Log('Iso StdOut: ' + ($r2.Out.Substring(0, [math]::Min(2000, $r2.Out.Length)))) }
             if ($r2.Err) { Log('Iso StdErr: ' + ($r2.Err.Substring(0, [math]::Min(2000, $r2.Err.Length)))) }
 
@@ -204,7 +222,6 @@ function Install-Ext([string]$extId) {
 
 function Add-VSCode-ContextMenu([string]$CodePath) {
     if (-not $CodePath) { Log('Add-VSCode-ContextMenu: no code path supplied, skipping'); return }
-
     $exe = Resolve-CodeExe -Path $CodePath
     if (-not $exe) { Log('Add-VSCode-ContextMenu: Code.exe could not be resolved from ' + $CodePath + '; skipping'); return }
 
@@ -220,10 +237,7 @@ function Add-VSCode-ContextMenu([string]$CodePath) {
         foreach ($p in $parentsToCheck) {
             $parentKey = Join-Path $root $p
             Log('Checking parent key: ' + $parentKey)
-            if (-not (Test-Path $parentKey)) {
-                Log('Parent key not present: ' + $parentKey)
-                continue
-            }
+            if (-not (Test-Path $parentKey)) { Log('Parent key not present: ' + $parentKey); continue }
             foreach ($n in $searchNames) {
                 $candKey = Join-Path $parentKey $n
                 if (-not (Test-Path $candKey)) { continue }
@@ -245,18 +259,12 @@ function Add-VSCode-ContextMenu([string]$CodePath) {
                 }
                 catch { Log('Error inspecting ' + $candKey + ': ' + $_.ToString()) }
             }
-            if ($foundAny) {
-                Log('Context menu entry exists under ' + $parentKey + ', skipping further scanning')
-                break
-            }
+            if ($foundAny) { Log('Context menu entry exists under ' + $parentKey + ', skipping further scanning'); break }
         }
         if ($foundAny) { break }
     }
 
-    if ($foundAny) {
-        Log('Context menu registration found existing entries; skipping creation')
-        return
-    }
+    if ($foundAny) { Log('Context menu registration found existing entries; skipping creation'); return }
 
     Log('No existing context menu entries found; creating entries')
     $createParents = @(
@@ -271,11 +279,7 @@ function Add-VSCode-ContextMenu([string]$CodePath) {
     foreach ($p in $createParents) {
         try {
             Log('Ensuring parent path: ' + $p)
-            if (-not (Test-Path $p)) {
-                New-Item -Path $p -Force | Out-Null
-                Log('Created parent path: ' + $p)
-            }
-
+            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null; Log('Created parent path: ' + $p) }
             $newName = 'OpenWithCode'
             $newKey = Join-Path $p $newName
             if (Test-Path $newKey) {
@@ -283,15 +287,12 @@ function Add-VSCode-ContextMenu([string]$CodePath) {
                 $newKey = Join-Path $p $newName
                 Log('Name collision, using ' + $newName)
             }
-
             New-Item -Path $newKey -Force -Value 'Open with Code' | Out-Null
             New-ItemProperty -Path $newKey -Name 'Icon' -Value ($exe + ',0') -PropertyType String -Force | Out-Null
-
             $cmdKey = Join-Path $newKey 'command'
             $arg = if ($p -match 'Background') { '%V' } elseif ($p -match '\*\shell') { '%1' } else { '%1' }
             $cmdValue = '"' + $exe + '" "' + $arg + '"'
             if ($arg -eq '%V') { $cmdValue = '"' + $exe + '" "%V"' }
-
             New-Item -Path $cmdKey -Force -Value $cmdValue | Out-Null
             Log('Added context menu entry at ' + $newKey)
         }
@@ -326,12 +327,9 @@ try {
     )
     foreach ($p in $candidates) { if (Test-Path $p) { $codeCmd = Get-Command $p -ErrorAction SilentlyContinue; break } }
 
-    if (-not $codeCmd) {
-        Log('"code" CLI not found after install attempt. Extensions and context menu steps may be skipped')
-        $ScriptSucceeded = $false
-    }
+    if (-not $codeCmd) { Log('"code" CLI not found after install attempt. Extensions and context menu steps may be skipped'); $ScriptSucceeded = $false }
 
-    $CodeExe = if ($codeCmd -and ($codeCmd.CommandType -eq 'Application' -or $codeCmd.CommandType -eq 'ExternalScript')) { $codeCmd.Source } elseif ($codeCmd) { 'code' } else { $null }
+    $CodeExe = if ($codeCmd -and ($codeCmd.CommandType -eq 'Application' -or $codeCmd.CommandType -eq 'ExternalScript')) { $codeCmd.Source } elseif ($codeCmd) { $codeCmd.Source } else { $null }
 
     $codePathFull = $null
     try {
@@ -445,10 +443,7 @@ try {
             $tmp2 = Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString() + '.json')
             $new | ConvertTo-Json -Depth 10 | Out-File -Encoding utf8 $tmp2
             try { Move-Item -Force $tmp2 $settingsFile } catch {
-                try { Copy-Item -Force $tmp2 $settingsFile; Remove-Item $tmp2 -ErrorAction SilentlyContinue } catch {
-                    Log('Failed to write settings.json: ' + $_.ToString())
-                    $ScriptSucceeded = $false
-                }
+                try { Copy-Item -Force $tmp2 $settingsFile; Remove-Item $tmp2 -ErrorAction SilentlyContinue } catch { Log('Failed to write settings.json: ' + $_.ToString()); $ScriptSucceeded = $false }
             }
         }
     }
@@ -464,7 +459,8 @@ try {
     }
     catch { Log('Could not list extensions to verify jupyter presence: ' + $_.ToString()); $ScriptSucceeded = $false }
 
-} catch {
+}
+catch {
     Log('Unexpected fatal error: ' + $_.ToString())
     $ScriptSucceeded = $false
 }
