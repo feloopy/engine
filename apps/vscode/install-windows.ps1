@@ -84,37 +84,45 @@ function Resolve-CodeExe([string]$Path){
     return $null
 }
 function Install-Ext([string]$e){
-    try{
-        if (-not $CodeExe) { Log "Skipping install of $e because code CLI unresolved"; return $false }
-        $res = Try-RunExe $CodeExe @('--list-extensions') 20
-        $installedList = if ($res.Success -and $res.Out) { $res.Out -split "`r?`n" } else { @() }
-        if ($installedList -contains $e) { Log "Extension $e already installed"; return $true }
-        for ($i = 1; $i -le $RetryCount; $i++){
-            Log "Installing extension $e (attempt $i)"
-            $r = Try-RunExe $CodeExe @('--install-extension',$e,'--force') 60
-            if ($r.Success) {
-                Start-Sleep -Milliseconds 500
-                $v = Try-RunExe $CodeExe @('--list-extensions') 20
-                $vList = if ($v.Success -and $v.Out) { $v.Out -split "`r?`n" } else { @() }
-                if ($vList -contains $e) { Log "Installed $e"; return $true }
-            }
-            Log "Install attempt failed for $e. Trying isolated dirs"
-            $tmpu = Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())
-            $tmpx = Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())
-            New-Item -ItemType Directory -Force -Path $tmpu | Out-Null
-            New-Item -ItemType Directory -Force -Path $tmpx | Out-Null
-            $r2 = Try-RunExe $CodeExe @('--user-data-dir',$tmpu,'--extensions-dir',$tmpx,'--install-extension',$e,'--force') 60
-            if ($r2.Success) {
-                $v2 = Try-RunExe $CodeExe @('--list-extensions','--extensions-dir',$tmpx) 20
-                $v2List = if ($v2.Success -and $v2.Out) { $v2.Out -split "`r?`n" } else { @() }
-                if ($v2List -contains $e) { Log "Installed $e into isolated dir"; Remove-Item -Recurse -Force $tmpu,$tmpx -ErrorAction SilentlyContinue; return $true }
-            }
-            Remove-Item -Recurse -Force $tmpu,$tmpx -ErrorAction SilentlyContinue
-            if ($i -lt $RetryCount) { Start-Sleep -Seconds ([int]($i * $i)) } else { Log "Failed to install extension $e after $RetryCount attempts" }
-        }
-        return $false
-    } catch { Log "Install-Ext unexpected error: $_"; return $false }
+ if(-not $CodeExe){ Log "Skipping install of $e because code CLI unresolved"; return $false }
+ $resList = Try-RunExe $CodeExe @('--list-extensions') 20
+ $installed = @()
+ if($resList.Success -and $resList.Out){ $installed = $resList.Out -split "`r?`n" }
+ if($installed -contains $e){ Log "Extension $e already installed"; return $true }
+ for($i=1;$i -le $RetryCount;$i++){
+  Log "Installing extension $e (attempt $i)"
+  $cmdLine = if(Test-Path $CodeExe){ "`"$CodeExe`" --install-extension $e --force" } else { "code --install-extension $e --force" }
+  $r = Invoke-ProcessWithTimeout 'cmd.exe' @('/c',$cmdLine) 60
+  Log "Attempt result exit=$($r.ExitCode) timedout=$($r.TimedOut)"
+  $so = ($r.StdOut -or '') ; $se = ($r.StdErr -or '')
+  Log ("StdOut: " + ($so.Substring(0,[math]::Min(2000,$so.Length))))
+  Log ("StdErr: " + ($se.Substring(0,[math]::Min(2000,$se.Length))))
+  if($r.Success -and -not $r.TimedOut -and $r.ExitCode -eq 0){
+   Start-Sleep -Milliseconds 500
+   $v = Try-RunExe $CodeExe @('--list-extensions') 20
+   if($v.Success -and ($v.Out -split "`r?`n" | Where-Object { $_.Trim() -eq $e })){ Log "Installed $e"; return $true }
+  }
+  Log "Install attempt failed for $e. Trying isolated dirs"
+  $tmpu=Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())
+  $tmpx=Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())
+  New-Item -ItemType Directory -Force -Path $tmpu | Out-Null
+  New-Item -ItemType Directory -Force -Path $tmpx | Out-Null
+  $cmdLine2 = if(Test-Path $CodeExe){ "`"$CodeExe`" --user-data-dir `"$tmpu`" --extensions-dir `"$tmpx`" --install-extension $e --force" } else { "code --user-data-dir `"$tmpu`" --extensions-dir `"$tmpx`" --install-extension $e --force" }
+  $r2 = Invoke-ProcessWithTimeout 'cmd.exe' @('/c',$cmdLine2) 60
+  Log "Isolated attempt exit=$($r2.ExitCode) timedout=$($r2.TimedOut)"
+  $so2 = ($r2.StdOut -or '') ; $se2 = ($r2.StdErr -or '')
+  Log ("Iso StdOut: " + ($so2.Substring(0,[math]::Min(2000,$so2.Length))))
+  Log ("Iso StdErr: " + ($se2.Substring(0,[math]::Min(2000,$se2.Length))))
+  if($r2.Success -and -not $r2.TimedOut -and $r2.ExitCode -eq 0){
+   $v2 = Try-RunExe $CodeExe @('--list-extensions','--extensions-dir',$tmpx) 20
+   if($v2.Success -and ($v2.Out -split "`r?`n" | Where-Object { $_.Trim() -eq $e })){ Log "Installed $e into isolated dir"; Remove-Item -Recurse -Force $tmpu,$tmpx -ErrorAction SilentlyContinue; return $true }
+  }
+  Remove-Item -Recurse -Force $tmpu,$tmpx -ErrorAction SilentlyContinue
+  if($i -lt $RetryCount){ Start-Sleep -Seconds ([int]($i * $i)) } else { Log "Failed to install extension $e after $RetryCount attempts" }
+ }
+ return $false
 }
+
 function Add-VSCode-ContextMenu([string]$CodePath){
  if(-not $CodePath){ Log "Add-VSCode-ContextMenu: no code path supplied, skipping"; return }
  $exe = Resolve-CodeExe -Path $CodePath
