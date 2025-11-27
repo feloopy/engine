@@ -18,12 +18,37 @@ if(-not $codeCmd){
 }
 if(-not $codeCmd){ Log '"code" CLI not found after install attempt. Ensure VS Code is installed and "code" is on PATH.'; Exit 1 }
 $CodeExe = if($codeCmd.CommandType -eq 'Application' -or $codeCmd.CommandType -eq 'ExternalScript'){ $codeCmd.Source } else { 'code' }
-$exts=@('ms-python.python','ms-python.vscode-pylance','ms-toolsai.jupyter','ms-toolsai.jupyter-renderers','ms-python.black-formatter','ms-python.isort','njpwerner.autodocstring','ms-vscode-remote.remote-containers','VariableExplorer.variable-explorer')
+$codePathFull = $null
+try{ if($CodeExe -and (Test-Path $CodeExe)){ $codePathFull = (Get-Item $CodeExe).FullName }
+elseif($codeCmd -and $codeCmd.Path){ $codePathFull = $codeCmd.Path }
+else{
+  $cand=@("$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe","$env:ProgramFiles\Microsoft VS Code\Code.exe","$env:ProgramFiles(x86)\Microsoft VS Code\Code.exe","$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd")
+  foreach($cp in $cand){ if(Test-Path $cp){ $codePathFull=$cp; break } }
+  if(-not $codePathFull){ $g = Get-Command code -ErrorAction SilentlyContinue; if($g){ $codePathFull = $g.Source } }
+}
+} catch { $codePathFull = $null }
+
+$exts=@('ms-python.python','ms-python.vscode-pylance','ms-toolsai.jupyter','ms-toolsai.jupyter-renderers','ms-python.black-formatter','ms-python.isort','njpwerner.autodocstring','ms-vscode-remote.remote-containers','VariableExplorer.variable-explorer','Google.colab')
 function Install-Ext([string]$e){
   if(& $CodeExe --list-extensions 2>$null | Where-Object { $_ -eq $e }){ Log "Extension $e already installed"; return }
   for($i=1;$i -le $RetryCount;$i++){ Log "Installing extension $e (attempt $i)"; try{ & $CodeExe --install-extension $e --force *> $null; Log "Installed $e"; return } catch { Log "Install returned error, trying isolated dirs"; $tmpu=New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())) ; $tmpx=New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())); try{ & $CodeExe --user-data-dir $tmpu.FullName --extensions-dir $tmpx.FullName --install-extension $e --force; if((& $CodeExe --list-extensions --extensions-dir $tmpx.FullName) -contains $e){ Log "Installed $e into isolated dir"; Remove-Item -Recurse -Force $tmpu,$tmpx; return } } catch{}; Remove-Item -Recurse -Force $tmpu,$tmpx -ErrorAction SilentlyContinue; if($i -lt $RetryCount){ Start-Sleep -Seconds ($i*$i) } else { Log "Failed to install extension $e after $RetryCount attempts" } } }
   throw "Failed to install extension $e"
 }
+if($IsWindows -and $codePathFull){
+  try{
+    $regEntries=@(
+      @{Key='HKCU:\Software\Classes\Directory\shell\OpenInVSCode';Cmd="`"$codePathFull`" `"%V`""},
+      @{Key='HKCU:\Software\Classes\Directory\Background\shell\OpenInVSCode';Cmd="`"$codePathFull`" `"%V`""},
+      @{Key='HKCU:\Software\Classes\*\shell\OpenInVSCode';Cmd="`"$codePathFull`" `"%1`""}
+    )
+    foreach($r in $regEntries){
+      New-Item -Path $r.Key -Force -Value 'Open in VS Code' | Out-Null
+      New-Item -Path (Join-Path $r.Key 'command') -Force -Value $r.Cmd | Out-Null
+      Log "Added context menu entry at $($r.Key)"
+    }
+  } catch { Log "Failed to add Explorer context menu entries: $_" }
+} else { Log "Skipping context menu registration because not Windows or Code path unresolved" }
+
 foreach($e in $exts){ try{ Install-Ext $e } catch { Log "Continuing despite extension failure: $e" } }
 Log "Inspecting pyenv and pyenv-virtualenv environments"
 $interp=$null
