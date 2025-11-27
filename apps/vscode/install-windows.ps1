@@ -140,7 +140,7 @@ function Add-VSCode-ContextMenu([string]$CodePath){
      if($cmdVal -and ($cmdVal -like "*$exeName*" -or $cmdVal -like "*$exe*")){ Log "Matching command found in $candKey"; $foundAny=$true; break }
      $def = (Get-ItemProperty -Path $candKey -ErrorAction SilentlyContinue).'(default)'
      if($def -and ($def -match '(?i)open.*code|visual\s*studio\s*code|vscode')){ Log "Matching display name found in $candKey"; $foundAny=$true; break }
-    } catch { Log "Error inspecting $candKey: $_" }
+    } catch { Log "Error inspecting $_" }
    }
    if($foundAny){ Log "Context menu entry already exists under $parentKey, skipping further scanning"; break }
   }
@@ -164,7 +164,7 @@ function Add-VSCode-ContextMenu([string]$CodePath){
    if($arg -eq '%V'){ $cmdValue = "`"$exe`" `"%V`"" }
    New-Item -Path $cmdKey -Force -Value $cmdValue | Out-Null
    Log "Added context menu entry at $newKey"
-  } catch { Log "Failed to add entry under $p: $_" }
+  } catch { Log "Failed to add entry under: $_" }
  }
  Log "Context menu registration completed"
 }
