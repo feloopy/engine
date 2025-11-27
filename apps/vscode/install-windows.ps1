@@ -37,8 +37,12 @@ function Install-Ext([string]$e){
 
 function Resolve-CodeExe([string]$Path){
   if(-not $Path){ return $null }
-  if(Test-Path $Path -PathType Leaf -and $Path -like '*.exe'){ return (Get-Item $Path).FullName }
-  if(Test-Path $Path -PathType Leaf -and $Path -like '*.cmd'){ $parent=Split-Path $Path -Parent; $cand=Join-Path $parent '..\Code.exe'; $cand=(Resolve-Path $cand -ErrorAction SilentlyContinue); if($cand){ return (Get-Item $cand).FullName }; $cand=Join-Path (Split-Path $parent -Parent) 'Code.exe'; if(Test-Path $cand){ return (Get-Item $cand).FullName } }
+  if((Test-Path $Path -PathType Leaf) -and ($Path -like '*.exe')){ return (Get-Item $Path).FullName }
+  if((Test-Path $Path -PathType Leaf) -and ($Path -like '*.cmd')){
+    $parent=Split-Path $Path -Parent; $cand=Join-Path $parent '..\Code.exe'; $cand=(Resolve-Path $cand -ErrorAction SilentlyContinue)
+    if($cand){ return (Get-Item $cand).FullName }
+    $cand=Join-Path (Split-Path $parent -Parent) 'Code.exe'; if(Test-Path $cand){ return (Get-Item $cand).FullName }
+  }
   $known=@("$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe","$env:ProgramFiles\Microsoft VS Code\Code.exe","$env:ProgramFiles(x86)\Microsoft VS Code\Code.exe")
   foreach($k in $known){ if(Test-Path $k){ return (Get-Item $k).FullName } }
   $g = Get-Command code -ErrorAction SilentlyContinue
@@ -46,26 +50,52 @@ function Resolve-CodeExe([string]$Path){
   return $null
 }
 
-function Add-VSCode-ContextMenu {
+
+function Add-VSCode-ContextMenu{
   param([string]$CodePath)
   if(-not $CodePath){ Log "Add-VSCode-ContextMenu: code path not supplied, skipping"; return }
-  $exe = Resolve-CodeExe -Path $CodePath
+  $exe=Resolve-CodeExe -Path $CodePath
   if(-not $exe){ Log "Add-VSCode-ContextMenu: Code.exe could not be resolved from $CodePath; skipping to avoid using wrappers that show a console"; return }
-  $entries = @(
-    @{Key='HKCU:\Software\Classes\Directory\shell\OpenWithCode';Arg='%1';},
-    @{Key='HKCU:\Software\Classes\Directory\Background\shell\OpenWithCode';Arg='%V';},
-    @{Key='HKCU:\Software\Classes\*\shell\OpenWithCode';Arg='%1';}
+  $exeName=(Split-Path $exe -Leaf)
+  $parents=@(
+    @{Key='HKCU:\Software\Classes\Directory\shell';Arg='%1'},
+    @{Key='HKCU:\Software\Classes\Directory\Background\shell';Arg='%V'},
+    @{Key='HKCU:\Software\Classes\*\shell';Arg='%1'},
+    @{Key='HKCR:\Directory\shell';Arg='%1'},
+    @{Key='HKCR:\Directory\Background\shell';Arg='%V'},
+    @{Key='HKCR:\*\shell';Arg='%1'}
   )
-  foreach($e in $entries){
-    if(Test-Path $e.Key){ Log "Context menu entry already exists at $($e.Key), skipping"; continue }
+  foreach($p in $parents){
+    if(-not (Test-Path $p.Key)){ New-Item -Path $p.Key -Force | Out-Null }
+    $children = Get-ChildItem -Path $p.Key -ErrorAction SilentlyContinue
+    $exists = $false
+    foreach($c in $children){
+      try{
+        $def=(Get-ItemProperty -Path $c.PSPath -ErrorAction SilentlyContinue).'(default)'
+        if($def -and $def -eq 'Open with Code'){ $exists=$true; break }
+      } catch{}
+      try{
+        $icon=(Get-ItemProperty -Path $c.PSPath -Name 'Icon' -ErrorAction SilentlyContinue).Icon
+        if($icon -and ($icon -like "*$exeName*")){ $exists=$true; break }
+      } catch{}
+      try{
+        $cmdKey = Join-Path $c.PSPath 'command'
+        $cmdVal=(Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
+        if($cmdVal -and ($cmdVal -like "*$exeName*")){ $exists=$true; break }
+      } catch{}
+    }
+    if($exists){ Log "Context menu entry already exists under $($p.Key), skipping"; continue }
     try{
-      New-Item -Path $e.Key -Force -Value 'Open with Code' | Out-Null
-      New-ItemProperty -Path $e.Key -Name 'Icon' -Value "$exe,0" -PropertyType String -Force | Out-Null
-      $cmdKey = Join-Path $e.Key 'command'
-      $cmdValue = "`"$exe`" `"$($e.Arg)`""
+      $newKey = Join-Path $p.Key 'OpenWithCode'
+      New-Item -Path $newKey -Force -Value 'Open with Code' | Out-Null
+      New-ItemProperty -Path $newKey -Name 'Icon' -Value "$exe,0" -PropertyType String -Force | Out-Null
+      $cmdKey = Join-Path $newKey 'command'
+      $arg = $p.Arg
+      $cmdValue = "`"$exe`" `"$arg`""
+      if($arg -eq '%V'){ $cmdValue = "`"$exe`" `"%V`"" }
       New-Item -Path $cmdKey -Force -Value $cmdValue | Out-Null
-      Log "Added context menu entry at $($e.Key)"
-    } catch { Log "Failed to add entry $($e.Key): $_" }
+      Log "Added context menu entry at $newKey"
+    } catch { Log "Failed to add entry under $($p.Key): $_" }
   }
 }
 
@@ -109,3 +139,4 @@ if((Get-Command jq -ErrorAction SilentlyContinue) -and (Test-Path $settingsFile)
 } else { if(Test-Path $settingsFile){ Copy-Item $settingsFile "$settingsFile.bak" -Force } $new | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 $settingsFile }
 if(& $CodeExe --list-extensions 2>$null | Where-Object { $_ -eq 'ms-toolsai.jupyter' }){ Log "Jupyter extension present, Variables pane and Data Viewer available" } else { Log "Jupyter extension missing; install ms-toolsai.jupyter to get Data Viewer/Variables pane" }
 Log "Done. VS Code configured: interpreter $interp, autosave on, extensions attempted"
+
