@@ -34,20 +34,44 @@ function Install-Ext([string]$e){
   for($i=1;$i -le $RetryCount;$i++){ Log "Installing extension $e (attempt $i)"; try{ & $CodeExe --install-extension $e --force *> $null; Log "Installed $e"; return } catch { Log "Install returned error, trying isolated dirs"; $tmpu=New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())) ; $tmpx=New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())); try{ & $CodeExe --user-data-dir $tmpu.FullName --extensions-dir $tmpx.FullName --install-extension $e --force; if((& $CodeExe --list-extensions --extensions-dir $tmpx.FullName) -contains $e){ Log "Installed $e into isolated dir"; Remove-Item -Recurse -Force $tmpu,$tmpx; return } } catch{}; Remove-Item -Recurse -Force $tmpu,$tmpx -ErrorAction SilentlyContinue; if($i -lt $RetryCount){ Start-Sleep -Seconds ($i*$i) } else { Log "Failed to install extension $e after $RetryCount attempts" } } }
   throw "Failed to install extension $e"
 }
+
+function Resolve-CodeExe([string]$Path){
+  if(-not $Path){ return $null }
+  if(Test-Path $Path -PathType Leaf -and $Path -like '*.exe'){ return (Get-Item $Path).FullName }
+  if(Test-Path $Path -PathType Leaf -and $Path -like '*.cmd'){ $parent=Split-Path $Path -Parent; $cand=Join-Path $parent '..\Code.exe' ; $cand=(Resolve-Path $cand -ErrorAction SilentlyContinue) ; if($cand){ return (Get-Item $cand).FullName } ; $cand=Join-Path (Split-Path $parent -Parent) 'Code.exe'; if(Test-Path $cand){ return (Get-Item $cand).FullName } }
+  $known=@("$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe","$env:ProgramFiles\Microsoft VS Code\Code.exe","$env:ProgramFiles(x86)\Microsoft VS Code\Code.exe")
+  foreach($k in $known){ if(Test-Path $k){ return (Get-Item $k).FullName } }
+  $g = Get-Command code -ErrorAction SilentlyContinue
+  if($g -and (Test-Path $g.Source)){ return (Get-Item $g.Source).FullName }
+  return $null
+}
+
+function Add-VSCode-ContextMenu {
+  param([string]$CodePath)
+  if(-not $CodePath){ Log "Add-VSCode-ContextMenu: code path not supplied, skipping"; return }
+  $exe = Resolve-CodeExe -Path $CodePath
+  if(-not $exe){ Log "Add-VSCode-ContextMenu: Code.exe could not be resolved from $CodePath; skipping to avoid using wrappers that show a console"; return }
+  $entries = @(
+    @{Key='HKCU:\Software\Classes\Directory\shell\OpenWithCode';Arg='%V';},
+    @{Key='HKCU:\Software\Classes\Directory\Background\shell\OpenWithCode';Arg='%V';},
+    @{Key='HKCU:\Software\Classes\*\shell\OpenWithCode';Arg='%1';}
+  )
+  foreach($e in $entries){
+    if(Test-Path $e.Key){ Log "Context menu entry already exists at $($e.Key), skipping"; continue }
+    try{
+      New-Item -Path $e.Key -Force -Value 'Open with Code' | Out-Null
+      New-ItemProperty -Path $e.Key -Name 'Icon' -Value "$exe,0" -PropertyType String -Force | Out-Null
+      $cmdKey = Join-Path $e.Key 'command'
+      $cmdValue = "`"$exe`" `"$($e.Arg)`""
+      New-Item -Path $cmdKey -Force -Value $cmdValue | Out-Null
+      Log "Added context menu entry at $($e.Key)"
+    } catch { Log "Failed to add entry $($e.Key): $_" }
+  }
+}
+
 if($codePathFull){
-  try{
-    $regEntries=@(
-      @{Key='HKCU:\Software\Classes\Directory\shell\OpenInVSCode';Cmd="`"$codePathFull`" `"%V`""},
-      @{Key='HKCU:\Software\Classes\Directory\Background\shell\OpenInVSCode';Cmd="`"$codePathFull`" `"%V`""},
-      @{Key='HKCU:\Software\Classes\*\shell\OpenInVSCode';Cmd="`"$codePathFull`" `"%1`""}
-    )
-    foreach($r in $regEntries){
-      New-Item -Path $r.Key -Force -Value 'Open in VS Code' | Out-Null
-      New-Item -Path (Join-Path $r.Key 'command') -Force -Value $r.Cmd | Out-Null
-      Log "Added context menu entry at $($r.Key)"
-    }
-  } catch { Log "Failed to add Explorer context menu entries: $_" }
-} else { Log "Skipping context menu registration because not Windows or Code path unresolved" }
+  Add-VSCode-ContextMenu -CodePath $codePathFull
+} else { Log "Skipping context menu registration because Code path unresolved" }
 
 foreach($e in $exts){ try{ Install-Ext $e } catch { Log "Continuing despite extension failure: $e" } }
 Log "Inspecting pyenv and pyenv-virtualenv environments"

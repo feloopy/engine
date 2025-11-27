@@ -30,7 +30,7 @@ install_vscode(){ log "Installing or verifying VS Code"; case "$PKG_MANAGER" in
 esac; }
 install_vscode
 if ! command -v code >/dev/null 2>&1; then log 'Error: "code" CLI not found after install. Ensure VS Code is installed and "code" is on PATH.'; exit 1; fi
-exts=(ms-python.python ms-python.vscode-pylance ms-toolsai.jupyter ms-toolsai.jupyter-renderers ms-python.black-formatter ms-python.isort njpwerner.autodocstring ms-vscode-remote.remote-containers VariableExplorer.variable-explorer)
+exts=(ms-python.python ms-python.vscode-pylance ms-toolsai.jupyter ms-toolsai.jupyter-renderers ms-python.black-formatter ms-python.isort njpwerner.autodocstring ms-vscode-remote.remote-containers VariableExplorer.variable-explorer Google.colab)
 install_ext(){ local e="$1" tmpu tmpx rc
   if code --list-extensions | grep -Fxq "$e"; then log "Extension $e already installed"; return 0; fi
   for ((i=1;i<=RETRY_COUNT;i++)); do
@@ -84,4 +84,25 @@ JSON
 if command -v jq >/dev/null 2>&1 && [ -f "$SETTINGS_FILE" ]; then jq -s '.[0] * .[1]' "$SETTINGS_FILE" "$NEW_SETTINGS" > "${NEW_SETTINGS}.merged" && mv "${NEW_SETTINGS}.merged" "$SETTINGS_FILE" || mv "$NEW_SETTINGS" "$SETTINGS_FILE"; else if [ -f "$SETTINGS_FILE" ]; then cp "$SETTINGS_FILE" "$SETTINGS_FILE".bak || true; mv "$NEW_SETTINGS" "$SETTINGS_FILE"; else mv "$NEW_SETTINGS" "$SETTINGS_FILE"; fi; fi
 log "Verifying Jupyter variable explorer availability"
 if code --list-extensions | grep -Fxq "ms-toolsai.jupyter"; then log "Jupyter extension present, Variables pane and Data Viewer available"; else log "Jupyter extension missing; install ms-toolsai.jupyter to get Data Viewer/Variables pane"; fi
+
+create_context_menu(){ mkdir -p "$USER_HOME/.local/share/applications" "$USER_HOME/.local/share/nautilus/scripts" "$XDG_CONFIG_HOME"; cat >"$USER_HOME/.local/share/applications/open-with-vscode.desktop" <<'DESK'
+[Desktop Entry]
+Name=Open with Code
+Exec=code --new-window %F
+Terminal=false
+Type=Application
+Icon=visual-studio-code
+Categories=Development;IDE;
+MimeType=inode/directory;text/plain;application/x-python;application/x-shellscript;application/json;
+DESK
+chmod 644 "$USER_HOME/.local/share/applications/open-with-vscode.desktop" || true
+if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database "$USER_HOME/.local/share/applications" >/dev/null 2>&1 || true; fi
+printf '%s\n' '#!/bin/bash' 'code "$@"' >"$USER_HOME/.local/share/nautilus/scripts/Open With Code" && chmod +x "$USER_HOME/.local/share/nautilus/scripts/Open With Code" || true
+for m in inode/directory text/plain application/x-python application/x-shellscript application/json; do if command -v xdg-mime >/dev/null 2>&1; then xdg-mime default open-with-vscode.desktop "$m" >/dev/null 2>&1 || true; fi; done
+MIMEFILE="${XDG_CONFIG_HOME:-$USER_HOME/.config}/mimeapps.list"
+[ -f "$MIMEFILE" ] || printf '%s\n' '[Default Applications]' '[Added Associations]' >"$MIMEFILE"
+if ! grep -Fq 'inode/directory=open-with-vscode.desktop' "$MIMEFILE" 2>/dev/null; then awk '/\[Added Associations\]/{print;print "inode/directory=open-with-vscode.desktop;";next}1' "$MIMEFILE" >"$MIMEFILE.tmp" 2>/dev/null && mv "$MIMEFILE.tmp" "$MIMEFILE" || true; fi
+}
+create_context_menu || true
+
 log "Done. VS Code configured: interpreter $INTERP, autosave on, extensions installed"

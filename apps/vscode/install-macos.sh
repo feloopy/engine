@@ -13,7 +13,7 @@ BREW_PREFIX="$(command -v brew >/dev/null 2>&1 && brew --prefix || true)"
 install_vscode(){ log "Installing or verifying VS Code"; if command -v code >/dev/null 2>&1; then log "code CLI already present"; return 0; fi; if command -v brew >/dev/null 2>&1; then run "brew install --cask visual-studio-code" || true; fi; if [ -d "/Applications/Visual Studio Code.app" ]; then binpath="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"; targetdir="${BREW_PREFIX:+$BREW_PREFIX/bin:/usr/local/bin}"; if [ -x "$binpath" ]; then if [ -n "$BREW_PREFIX" ] && [ -w "$BREW_PREFIX/bin" ]; then ln -sf "$binpath" "$BREW_PREFIX/bin/code" || true; elif [ -w /usr/local/bin ]; then ln -sf "$binpath" /usr/local/bin/code || true; else mkdir -p "$USER_HOME/bin" && ln -sf "$binpath" "$USER_HOME/bin/code" || true; fi; fi; fi; if command -v code >/dev/null 2>&1; then log "VS Code ready"; else log "VS Code CLI not found after install; ensure '/Applications/Visual Studio Code.app' exists and 'code' is on PATH"; fi; }
 install_vscode
 if ! command -v code >/dev/null 2>&1; then log 'Error: "code" CLI not found after install. Ensure VS Code is installed and "code" is on PATH.'; exit 1; fi
-exts=(ms-python.python ms-python.vscode-pylance ms-toolsai.jupyter ms-toolsai.jupyter-renderers ms-python.black-formatter ms-python.isort njpwerner.autodocstring ms-vscode-remote.remote-containers VariableExplorer.variable-explorer)
+exts=(ms-python.python ms-python.vscode-pylance ms-toolsai.jupyter ms-toolsai.jupyter-renderers ms-python.black-formatter ms-python.isort njpwerner.autodocstring ms-vscode-remote.remote-containers VariableExplorer.variable-explorer Google.colab)
 install_ext(){ local e="$1" tmpu tmpx rc; if code --list-extensions | grep -Fxq "$e"; then log "Extension $e already installed"; return 0; fi; for ((i=1;i<=RETRY_COUNT;i++)); do log "Installing extension $e (attempt $i)"; if code --install-extension "$e" --force >/dev/null 2>&1; then log "Installed $e"; return 0; fi; rc=$?; log "Install returned $rc, trying isolated dirs"; tmpu="$(mktemp -d)" && tmpx="$(mktemp -d)"; if command -v timeout >/dev/null 2>&1; then timeout 60s code --user-data-dir "$tmpu" --extensions-dir "$tmpx" --install-extension "$e" --force >/dev/null 2>&1 || true; else code --user-data-dir "$tmpu" --extensions-dir "$tmpx" --install-extension "$e" --force >/dev/null 2>&1 || true; fi; if code --list-extensions --extensions-dir "$tmpx" | grep -Fxq "$e"; then log "Installed $e into isolated dir"; rm -rf "$tmpu" "$tmpx"; return 0; fi; rm -rf "$tmpu" "$tmpx"; if [ $i -lt "$RETRY_COUNT" ]; then sleep $((i*i)); else log "Failed to install extension $e after $RETRY_COUNT attempts"; fi; done; return 1; }
 for e in "${exts[@]}"; do install_ext "$e" || true; done
 log "Inspecting pyenv and pyenv-virtualenv environments"
@@ -37,4 +37,23 @@ JSON
 if command -v jq >/dev/null 2>&1 && [ -f "$SETTINGS_FILE" ]; then jq -s '.[0] * .[1]' "$SETTINGS_FILE" "$NEW_SETTINGS" > "${NEW_SETTINGS}.merged" && mv "${NEW_SETTINGS}.merged" "$SETTINGS_FILE" || mv "$NEW_SETTINGS" "$SETTINGS_FILE"; else if [ -f "$SETTINGS_FILE" ]; then cp "$SETTINGS_FILE" "$SETTINGS_FILE".bak || true; mv "$NEW_SETTINGS" "$SETTINGS_FILE"; else mv "$NEW_SETTINGS" "$SETTINGS_FILE"; fi; fi
 log "Verifying Jupyter variable explorer availability"
 if code --list-extensions | grep -Fxq "ms-toolsai.jupyter"; then log "Jupyter extension present, Variables pane and Data Viewer available"; else log "Jupyter extension missing; install ms-toolsai.jupyter to get Data Viewer/Variables pane"; fi
+
+find_code_cli(){ if command -v code >/dev/null 2>&1; then command -v code; return 0; fi; for p in "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" "/usr/local/bin/code" "${BREW_PREFIX:+$BREW_PREFIX/bin/code}" "$USER_HOME/bin/code"; do [ -n "$p" ] && [ -x "$p" ] && { echo "$p"; return 0; }; done; return 1; }
+
+create_open_with_code_mac(){
+  code_cli="$(find_code_cli || true)"
+  mkdir -p "$USER_HOME/bin" "$USER_HOME/Applications" "$USER_HOME/Library/Services"
+  if [ -n "$code_cli" ] && [ ! -x "$USER_HOME/bin/code" ]; then ln -sf "$code_cli" "$USER_HOME/bin/code" || true; fi
+  app="$USER_HOME/Applications/Open With Code.app"
+  svc="$USER_HOME/Library/Services/Open With Code.workflow"
+  if [ -d "$app" ] || [ -d "$svc" ]; then log "Open With Code already present, skipping creation"; return 0; fi
+  if command -v osacompile >/dev/null 2>&1; then
+    osacompile -o "$app" -e 'on run argv repeat with x in argv do do shell script "code " & quoted form of x end repeat end run' >/dev/null 2>&1 || true
+    if [ -d "$app" ]; then log "Created $app"; return 0; fi
+  fi
+  if [ ! -f "$USER_HOME/bin/Open With Code" ]; then printf '%s\n' '#!/bin/bash' 'code "$@"' >"$USER_HOME/bin/Open With Code" && chmod +x "$USER_HOME/bin/Open With Code" || true; fi
+  log "Created fallback launcher at $USER_HOME/bin/Open With Code"
+}
+create_open_with_code_mac || true
+
 log "Done. VS Code configured: interpreter $INTERP, autosave on, extensions installed"
