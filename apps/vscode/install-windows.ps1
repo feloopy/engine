@@ -34,6 +34,8 @@ function Install-Ext([string]$e){
   for($i=1;$i -le $RetryCount;$i++){ Log "Installing extension $e (attempt $i)"; try{ & $CodeExe --install-extension $e --force *> $null; Log "Installed $e"; return } catch { Log "Install returned error, trying isolated dirs"; $tmpu=New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())) ; $tmpx=New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())); try{ & $CodeExe --user-data-dir $tmpu.FullName --extensions-dir $tmpx.FullName --install-extension $e --force; if((& $CodeExe --list-extensions --extensions-dir $tmpx.FullName) -contains $e){ Log "Installed $e into isolated dir"; Remove-Item -Recurse -Force $tmpu,$tmpx; return } } catch{}; Remove-Item -Recurse -Force $tmpu,$tmpx -ErrorAction SilentlyContinue; if($i -lt $RetryCount){ Start-Sleep -Seconds ($i*$i) } else { Log "Failed to install extension $e after $RetryCount attempts" } } }
   throw "Failed to install extension $e"
 }
+$IsWindows = $false
+try{ $IsWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) } catch { $IsWindows = ($env:OS -and $env:OS -like '*Windows*') }
 if($IsWindows -and $codePathFull){
   try{
     $regEntries=@(
