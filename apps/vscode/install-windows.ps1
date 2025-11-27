@@ -38,7 +38,7 @@ function Install-Ext([string]$e){
 function Resolve-CodeExe([string]$Path){
   if(-not $Path){ return $null }
   if(Test-Path $Path -PathType Leaf -and $Path -like '*.exe'){ return (Get-Item $Path).FullName }
-  if(Test-Path $Path -PathType Leaf -and $Path -like '*.cmd'){ $parent=Split-Path $Path -Parent; $cand=Join-Path $parent '..\Code.exe' ; $cand=(Resolve-Path $cand -ErrorAction SilentlyContinue) ; if($cand){ return (Get-Item $cand).FullName } ; $cand=Join-Path (Split-Path $parent -Parent) 'Code.exe'; if(Test-Path $cand){ return (Get-Item $cand).FullName } }
+  if(Test-Path $Path -PathType Leaf -and $Path -like '*.cmd'){ $parent=Split-Path $Path -Parent; $cand=Join-Path $parent '..\Code.exe'; $cand=(Resolve-Path $cand -ErrorAction SilentlyContinue); if($cand){ return (Get-Item $cand).FullName }; $cand=Join-Path (Split-Path $parent -Parent) 'Code.exe'; if(Test-Path $cand){ return (Get-Item $cand).FullName } }
   $known=@("$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe","$env:ProgramFiles\Microsoft VS Code\Code.exe","$env:ProgramFiles(x86)\Microsoft VS Code\Code.exe")
   foreach($k in $known){ if(Test-Path $k){ return (Get-Item $k).FullName } }
   $g = Get-Command code -ErrorAction SilentlyContinue
@@ -52,7 +52,7 @@ function Add-VSCode-ContextMenu {
   $exe = Resolve-CodeExe -Path $CodePath
   if(-not $exe){ Log "Add-VSCode-ContextMenu: Code.exe could not be resolved from $CodePath; skipping to avoid using wrappers that show a console"; return }
   $entries = @(
-    @{Key='HKCU:\Software\Classes\Directory\shell\OpenWithCode';Arg='%V';},
+    @{Key='HKCU:\Software\Classes\Directory\shell\OpenWithCode';Arg='%1';},
     @{Key='HKCU:\Software\Classes\Directory\Background\shell\OpenWithCode';Arg='%V';},
     @{Key='HKCU:\Software\Classes\*\shell\OpenWithCode';Arg='%1';}
   )
